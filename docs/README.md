@@ -3,7 +3,7 @@
 ## 1. Executive Summary & Objective
 This Spec Kit outlines the technical specification, architectural design, and step-by-step developer tasks for building a lightweight Windows 11 Proof of Concept (PoC) application written in **Go (Golang)** using `go-wca` (Windows Core Audio API binding).
 
-The application runs both as a **System Tray Application** (with option to operate headless as a Windows Service/Daemon) that monitors active WASAPI audio capture streams on Windows 11 to detect when Microsoft Teams (`ms-teams.exe` / `Teams.exe`) opens an active microphone audio session (indicating an active call). Upon detecting a active call, it displays an on-screen notification / log message and prepares the triggers for ESP32-S3 LED Ring actuation.
+The application runs both as a **System Tray Application** (with an optional `--headless` mode without tray UI, auto-started at user logon) that monitors active WASAPI audio capture streams on Windows 11 to detect when Microsoft Teams (`ms-teams.exe` / `Teams.exe`) opens an active microphone audio session (indicating an active call). Upon detecting a active call, it displays an on-screen notification / log message and prepares the triggers for ESP32-S3 LED Ring actuation.
 
 ---
 
@@ -65,5 +65,6 @@ The application runs both as a **System Tray Application** (with option to opera
    - Check state via `GetState()`: if `AudioSessionStateActive` (1), Teams call is ACTIVE.
 2. **Debounce / Hysteresis:**
    - Microphones can flicker between active and quiet. Maintain a 1.5–2s debounce buffer before signaling state transition from `IN_CALL` to `IDLE`.
-3. **Tray & Service Architecture:**
-   - Single binary supporting multi-mode: GUI Tray app mode (default) and Windows Service mode (when invoked with `--service` via `golang.org/x/sys/windows/svc`).
+3. **Tray & Headless Architecture (no Windows Service):**
+   - Single binary: GUI Tray app mode (default) and headless mode (`--headless`: detection + ESP32 only, logs to stdout/file).
+   - Windows Services run in Session 0: no tray/toast, and Teams' mic session may not be visible from there. The app always runs in the user's session; auto-start uses `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (no admin).

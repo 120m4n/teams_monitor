@@ -13,6 +13,6 @@ Provide abstraction layer to send `ACTIVATE` / `DEACTIVATE` signals to ESP32-S3 
 `pkg/actuator/actuator.go`, `pkg/actuator/serial.go`, `pkg/actuator/http.go`
 
 ## Implementation Checklist
-- [ ] Implement `Actuator` interface: `SetCallState(active bool) error`.
-- [ ] Implement `SerialActuator` with auto-reconnect logic.
-- [ ] Implement `HTTPActuator` for wireless setups.
+- [x] Implement `Actuator` interface: `SetCallState(active bool) error`.
+- [x] Implement `SerialActuator` with auto-reconnect logic.
+- [x] Implement `HTTPActuator` for wireless setups.

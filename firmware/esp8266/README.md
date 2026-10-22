@@ -62,6 +62,48 @@ Causas más probables, en orden:
 - **WiFi**: copia `src/secrets.example.h` a `src/secrets.h`, pon el SSID y la contraseña (solo redes de 2.4 GHz) y vuelve a flashear. Sin ese archivo el firmware solo acepta serial. Reserva la IP de la placa en el router para que no cambie.
 - **PlatformIO sin instalar**: `uv tool install platformio`, o `pip install platformio`.
 
+## Modo WiFi (alimentación externa, sin USB al PC)
+
+La app ya lo soporta: lanzada con `--http` y sin `--serial`, no toca el puerto COM. Lo que hace falta es que el firmware se compile con `src/secrets.h`. Sin ese archivo es solo serial.
+
+**1. Configurar WiFi y flashear** (una vez, con el USB conectado):
+
+```powershell
+cd firmware\esp8266
+copy src\secrets.example.h src\secrets.h
+notepad src\secrets.h          # pon WIFI_SSID y WIFI_PASS (red de 2.4 GHz; el ESP8266 no ve 5 GHz)
+pio run -t upload --upload-port COM16
+pio device monitor -p COM16    # espera la línea "HTTP: POST http://192.168.x.x/led", anota la IP, Ctrl+C
+```
+
+`secrets.h` está en `.gitignore`, así que la contraseña no se sube al repo.
+
+**2. Reservar la IP en el router** (DHCP reservation, por la MAC de la placa, que muestra el flasheo). Si no, la IP puede cambiar al reiniciar y la app dejaría de encontrar la placa.
+
+**3. Alimentar la placa por fuera:**
+- Desconecta el USB del PC y aliméntala con un cargador USB de 5 V en el mismo conector, o con 5 V en el pin VIN/VU.
+- El anillo sigue cableado igual.
+- Al arrancar se conecta solo al WiFi, en unos segundos.
+
+**4. Probar desde PowerShell:**
+
+```powershell
+$ip = "192.168.x.x"
+Invoke-RestMethod -Method Post -Uri "http://$ip/led" -ContentType text/plain -Body "CALL_ON"   # -> OK
+Invoke-RestMethod -Method Post -Uri "http://$ip/led" -ContentType text/plain -Body "FX 4"      # -> OK
+Invoke-RestMethod -Method Post -Uri "http://$ip/led" -ContentType text/plain -Body "CALL_OFF"  # -> OK
+```
+
+**5. Lanzar la app solo con HTTP:**
+
+```powershell
+.\teams_monitor.exe --http http://192.168.x.x/led           # sigue el timeline de efectos
+.\teams_monitor.exe --http http://192.168.x.x/led --fx 3    # fuerza el auto fantástico
+```
+
+- **Fallos de red:** si la placa no responde, la app espera hasta 3 s, anota el error en `%LOCALAPPDATA%\teams_monitor\teams_monitor.log` y sigue. No reintenta; el anillo se actualiza en el siguiente cambio de estado.
+- **Inicio automático:** si lo activas desde la bandeja, se guardan los mismos flags, así que arrancará con `--http ...`.
+
 ## Compilar y flashear
 
 ```powershell

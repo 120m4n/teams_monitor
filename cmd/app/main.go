@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -28,9 +29,13 @@ func main() {
 	httpURL := flag.String("http", "", "ESP32 HTTP endpoint, e.g. http://192.168.1.50/led")
 	interval := flag.Duration("interval", time.Second, "detector poll interval")
 	debounce := flag.Int("debounce", 2, "consecutive readings needed to change state")
+	fx := flag.Int("fx", -1, "force LED effect 0-4 during calls (fade-in, breathe, voice, scanner, disco); -1 follows call length")
 	flag.Parse()
 
 	setupLog()
+	if *fx >= 0 {
+		actuator.OnPayload = fmt.Sprintf("FX %d\n", *fx)
+	}
 
 	// Auto-start (HKCU Run) and the scheduled task may both launch us; keep one.
 	if _, err := windows.CreateMutex(nil, false, windows.StringToUTF16Ptr(`Local\TeamsMonitor`)); err == windows.ERROR_ALREADY_EXISTS {

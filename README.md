@@ -95,8 +95,81 @@ go build -ldflags -H=windowsgui -o teams_monitor.exe ./cmd/app   # en macOS/Linu
 | `--headless` | false | sin bandeja ni notificaciones |
 | `--interval 1s` | 1s | intervalo de consulta |
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
+| `--fx 3` | -1 | fuerza un efecto LED en llamada (0 fade-in, 1 breathe, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
+
+## Tricks
+
+### Encontrar el puerto COM del ESP8266
+
+Ver todos los puertos COM con su nombre de dispositivo:
+
+```powershell
+Get-CimInstance Win32_PnPEntity | Where-Object Name -match '\(COM\d+\)' | Select-Object Name
+# -> USB-SERIAL CH340 (COM16)
+```
+
+Obtener solo el puerto del ESP8266, filtrando por el chip CH340 (VID `1A86`, PID `7523`):
+
+```powershell
+$com = Get-CimInstance Win32_PnPEntity |
+  Where-Object { $_.DeviceID -match 'VID_1A86&PID_7523' -and $_.Name -match '\((COM\d+)\)' } |
+  ForEach-Object { $Matches[1] } | Select-Object -First 1
+$com   # -> COM16
+```
+
+Usarlo directamente al lanzar la app:
+
+```powershell
+.\teams_monitor.exe --serial $com
+```
+
+Variante más simple, filtrando por nombre (si hay varios CH340 conectados, devuelve un puerto equivocado):
+
+```powershell
+(Get-CimInstance Win32_PnPEntity | Where-Object Name -match 'CH340.*\((COM\d+)\)') | ForEach-Object { $Matches[1] }
+```
+
+Lista sin nombres: `[System.IO.Ports.SerialPort]::GetPortNames()` devuelve solo los puertos (`COM1`, `COM16`…). Si hay varios, no sabrás cuál es el ESP8266.
+
+### Probar los efectos LED sin esperar los tiempos
+
+En una llamada, el firmware cambia de efecto con la duración (breathe a los 2 s, voice a los 15 min, scanner a los 30, disco a los 45). Para ver uno al instante hay tres caminos.
+
+**1. Desde la app, con `--fx`.** Al detectar la llamada manda `FX n` en lugar de `CALL_ON`; al colgar, `CALL_OFF` como siempre:
+
+```powershell
+.\teams_monitor.exe --serial COM16 --fx 3   # en llamada: directo al auto fantástico
+.\fake\ms-teams.exe -for 20s                # llamada simulada
+```
+
+**2. Sin la app.** Muestra los 5 efectos, 5 s cada uno. La app tiene que estar cerrada, porque ocupa el puerto COM:
+
+```powershell
+$p = New-Object System.IO.Ports.SerialPort COM16,115200
+$p.Open(); Start-Sleep 2; $p.ReadExisting() | Out-Null
+0..4 | ForEach-Object { $p.WriteLine("FX $_"); Start-Sleep 5; $p.ReadExisting() }
+$p.WriteLine("CALL_OFF"); Start-Sleep 1; $p.Close()
+```
+
+**3. Por WiFi con la app corriendo.** Si el firmware se flasheó con `secrets.h`, la app puede usar el serial mientras tú mandas `FX` por HTTP:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://<ip>/led" -ContentType text/plain -Body "FX 4"
+```
+
+### Usar el anillo por WiFi, sin cable USB al PC
+
+Flashea el firmware con `src/secrets.h` (tu WiFi), alimenta la placa con cualquier cargador de 5 V y lanza la app solo con `--http`:
+
+```powershell
+.\teams_monitor.exe --http http://192.168.x.x/led   # opcional: --fx 3
+```
+
+El procedimiento completo (flasheo, IP fija, alimentación y pruebas) está en [firmware/esp8266/README.md](firmware/esp8266/README.md#modo-wifi-alimentación-externa-sin-usb-al-pc).
+
+Más trucos del hardware (pinout, anillo que no enciende, puerto ocupado) en [firmware/esp8266/README.md](firmware/esp8266/README.md#trucos).
 
 ## Simular una llamada (sin Teams)
 

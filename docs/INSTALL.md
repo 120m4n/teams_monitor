@@ -58,3 +58,30 @@ schtasks /Delete /TN TeamsMonitor /F            # uninstall
 ### B. Tray menu "Start with Windows"
 
 Writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\TeamsMonitor` with the exe path and the flags it was started with. Simple, but there's no restart on crash.
+
+## 4. ESP8266 firmware (`firmware/esp8266`, PlatformIO)
+
+Wiring for a 12-LED WS2812 ring:
+
+| Ring | NodeMCU / D1 mini |
+|---|---|
+| DIN | D4 (GPIO2) |
+| 5V / VCC | VIN (5V from USB) |
+| GND | GND |
+
+- D4 is also the onboard LED, so it flickers when data is sent. That's harmless.
+- A 300–500 Ω resistor in series on DIN and a 470–1000 µF capacitor across 5V/GND are recommended.
+- If colors glitch, the 3.3 V data signal is too weak for the 5 V ring: add a level shifter (e.g. 74AHCT125).
+
+Flash it:
+
+```sh
+cd firmware/esp8266
+cp src/secrets.example.h src/secrets.h   # optional: enables HTTP; edit SSID/password (2.4 GHz only)
+pio run -t upload                        # add --upload-port COM3 (Windows) if needed
+pio device monitor                       # shows "teams_led ready" and, with WiFi, the HTTP URL
+```
+
+Without `secrets.h` the board only accepts serial commands. In the serial monitor, type `CALL_ON` or `CALL_OFF`. The ring turns red or off, and the board replies `OK ...`.
+
+Then run the PC app with `--serial COM3` or `--http http://<ip printed above>/led`. Reserve that IP in your router so it doesn't change. A board other than NodeMCU (e.g. D1 mini) needs `board = d1_mini` in `platformio.ini`.

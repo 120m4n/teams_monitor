@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Status
 
-Spec in `docs/README.md`, task specs in `tasks/TASK-0*.md` (TASK-01, 02, 04 done; TASK-03 pending). Read the relevant task file before implementing a component — each one names its target file paths and checklist.
+Spec in `docs/README.md`, task specs in `tasks/TASK-0*.md` (all four done; untested on real Windows hardware yet). Install/auto-start docs: `docs/INSTALL.md`. Read the relevant task file before implementing a component — each one names its target file paths and checklist.
 
 ## What this is
 
@@ -25,7 +25,10 @@ A Windows 11 PoC in Go: detects an active Microsoft Teams call by inspecting WAS
 - Windows-only code uses `//go:build windows` or `_windows` filenames; keep pure logic in untagged files so it tests on macOS (e.g. `pkg/detector/teams.go`).
 - Commands:
   - `go test ./...` — macOS-runnable tests
+  - `GOOS=windows GOARCH=amd64 go build -ldflags -H=windowsgui -o teams_monitor.exe ./cmd/app` — release build (no console window; logs in `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`)
   - `go test -run TestIsTeamsProcess ./pkg/detector` — single test
   - `GOOS=windows go vet ./...` — type-check Windows code from macOS
   - On Windows: `go test -v -run TestIsTeamsCallActive ./pkg/detector` — live mic-session check (logs result)
 - go-wca gotcha: `GetProcessId` returns an error for multi-process sessions (`AUDCLNT_S_NO_SINGLE_PROCESS` is a success HRESULT but go-wca treats non-zero as error); the detector skips such sessions.
+- `cmd/app` starts the manager goroutine (which owns COM) before the tray; the tray registers its listener in `onReady` and syncs to `mgr.State()`. A named mutex (`Local\TeamsMonitor`) enforces a single instance, because the HKCU Run key and the scheduled task (`deploy/install-task.ps1`) can both launch it.
+- Tray icons are `pkg/ui/icons/{idle,call}.ico` (multi-size, PNG-embedded), loaded with `go:embed`.

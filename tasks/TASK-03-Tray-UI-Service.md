@@ -16,8 +16,8 @@ Provide user interface feedback via Windows System Tray icon, menu, and popup no
 `cmd/app/main.go`, `pkg/ui/tray.go`, `pkg/ui/toast.go`
 
 ## Implementation Checklist
-- [ ] Create system tray icon asset loader.
-- [ ] Connect event manager callback to tray status text update and toast message.
-- [ ] Display Windows Toast: `"Teams Call Active! Actuating ESP32 LED Ring."`
-- [ ] Implement `--headless` flag.
-- [ ] Auto-start toggle writes/removes the `HKCU\...\Run` value (pass `--headless` through if set).
+- [x] Create system tray icon asset loader.
+- [x] Connect event manager callback to tray status text update and toast message.
+- [x] Display Windows Toast: `"Teams Call Active! Actuating ESP32 LED Ring."`
+- [x] Implement `--headless` flag.
+- [x] Auto-start toggle writes/removes the `HKCU\...\Run` value (pass `--headless` through if set).

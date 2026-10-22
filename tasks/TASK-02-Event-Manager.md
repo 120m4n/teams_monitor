@@ -12,6 +12,6 @@ Build a state machine that periodically polls the detector, handles state stabil
 `pkg/events/event_manager.go`
 
 ## Implementation Checklist
-- [ ] Define `CallState` enum (`StateIdle`, `StateInCall`).
-- [ ] Implement `Manager` struct with channel listeners `OnStateChange(func(newState CallState))`.
-- [ ] Implement polling ticker loop with thread-safe atomic status updates.
+- [x] Define `CallState` enum (`StateIdle`, `StateInCall`).
+- [x] Implement `Manager` struct with channel listeners `OnStateChange(func(newState CallState))`.
+- [x] Implement polling ticker loop with thread-safe atomic status updates.

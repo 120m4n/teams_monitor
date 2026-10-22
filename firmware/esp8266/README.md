@@ -113,6 +113,7 @@ Con un cuerpo inválido responde HTTP 400.
 
 ```powershell
 .\teams_monitor.exe --serial COM16     # o --http http://$ip/led
+.\fake\ms-teams.exe -for 30s           # llamada simulada; ver "Simular una llamada" en el README principal
 ```
 
-Entra a una llamada de Teams: en unos 2 s el anillo se enciende y aparece la notificación. Al colgar se apaga. Log en `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`.
+Entra a una llamada de Teams, o lanza la simulada: en unos 2 s el anillo se enciende y aparece la notificación. Al colgar se apaga. Log en `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`.

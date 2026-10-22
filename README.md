@@ -69,6 +69,7 @@ PlatformIO con el core Arduino y Adafruit NeoPixel. Lee líneas por serial a 115
 
 ```
 cmd/app/            main: flags, log, mutex, cableado del pipeline
+cmd/fake_call/      simula una llamada de Teams para pruebas (compilar como ms-teams.exe)
 pkg/detector/       detección WASAPI (Windows) + lógica de nombres (portable)
 pkg/events/         polling, debounce, máquina de estados
 pkg/ui/             bandeja, notificaciones, inicio automático, iconos
@@ -96,6 +97,20 @@ go build -ldflags -H=windowsgui -o teams_monitor.exe ./cmd/app   # en macOS/Linu
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
+
+## Simular una llamada (sin Teams)
+
+`cmd/fake_call` abre una sesión de captura en el micrófono de comunicaciones por defecto y la mantiene activa; no lee ni guarda audio. Si se compila con el nombre `ms-teams.exe`, el detector lo toma por Teams. Así se prueba la cadena completa: detector → debounce → bandeja y notificación → serial → firmware.
+
+```powershell
+go build -o fake\ms-teams.exe ./cmd/fake_call   # una vez
+.\teams_monitor.exe --serial COM16               # la app (otra ventana)
+.\fake\ms-teams.exe -for 30s                     # "llamada" de 30 s; Ctrl+C cuelga antes
+```
+
+Unos 2 s después de arrancar `ms-teams.exe`, el icono se pone rojo, sale la notificación y el anillo se enciende. Unos 2 s después de colgar, todo vuelve a reposo. Para la llamada falsa, Windows tiene que permitir que las apps de escritorio usen el micrófono (Configuración → Privacidad → Micrófono).
+
+Para validar solo el detector: `.\fake\ms-teams.exe -for 20s` en una ventana y `go test -count=1 -v -run TestIsTeamsCallActive ./pkg/detector` en otra, que debería dar `Teams call active: true`.
 
 ## Tests
 

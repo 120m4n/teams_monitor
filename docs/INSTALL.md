@@ -61,13 +61,18 @@ Writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\TeamsMonitor` with th
 
 ## 4. ESP8266 firmware (`firmware/esp8266`, PlatformIO)
 
-Wiring for a 12-LED WS2812 ring:
+Wiring for a 12-LED WS2812B ring (e.g. WCMCU-2812B-12). Go by the pad labels on the ring, not the wire colors:
 
-| Ring | NodeMCU / D1 mini |
+| Ring pad | NodeMCU / D1 mini |
 |---|---|
-| DIN | D4 (GPIO2) |
-| 5V / VCC | VIN (5V from USB) |
-| GND | GND |
+| DI / DIN / IN | D4 (GPIO2) |
+| 5V / VCC | VIN on NodeMCU, 5V on D1 mini (5V from USB) |
+| GND | G / GND |
+| DO / DOUT | not connected (only for chaining another ring) |
+
+- Connect GND and 5V before the data wire.
+- If the data wire is soldered to DO instead of DI, the ring stays dark.
+- If the ring flickers, try powering it from 3V3 instead: WS2812B usually runs at 3.3 V, which also matches the data level. At the default brightness (80/255, red) the ring draws ~75 mA.
 
 - D4 is also the onboard LED, so it flickers when data is sent. That's harmless.
 - A 300–500 Ω resistor in series on DIN and a 470–1000 µF capacitor across 5V/GND are recommended.

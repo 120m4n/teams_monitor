@@ -25,13 +25,18 @@ type Config struct {
 		Gateway  string `xml:"gateway,attr"`
 		Subnet   string `xml:"subnet,attr"`
 	} `xml:"wifi"`
-	FX int `xml:"fx"`
+	FX  int `xml:"fx"`
+	Web struct {
+		Listen   string `xml:"listen,attr"`   // e.g. 127.0.0.1:8080; empty: no web page
+		Cooldown int    `xml:"cooldown,attr"` // seconds between pings from one client
+	} `xml:"web"`
 }
 
 // Load reads path. A missing file is not an error: it returns the defaults.
 func Load(path string) (*Config, error) {
 	c := &Config{FX: -1}
 	c.Actuator.Serial.Baud = 115200
+	c.Web.Cooldown = 30
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil

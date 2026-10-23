@@ -23,12 +23,14 @@ func NewSerialActuator(portName string, baud int) *SerialActuator {
 	}}
 }
 
-func (a *SerialActuator) SetCallState(active bool) error {
+func (a *SerialActuator) SetCallState(active bool) error { return a.Send(payload(active)) }
+
+func (a *SerialActuator) Send(msg string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	err := a.write(payload(active))
+	err := a.write(msg)
 	if err != nil { // stale handle after unplug: reconnect and retry once
-		err = a.write(payload(active))
+		err = a.write(msg)
 	}
 	return err
 }

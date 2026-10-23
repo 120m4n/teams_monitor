@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aro LED</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { display: grid; place-items: center; min-height: 100vh; margin: 0; padding: 0 16px; text-align: center; }
+  button { font: inherit; font-size: 1.5rem; padding: 1rem 2.5rem; border: 0; border-radius: 999px; background: #c62828; color: #fff; cursor: pointer; }
+  button:focus-visible { outline: 3px solid #ff8a80; outline-offset: 3px; }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+<main>
+  <h1>Aro LED</h1>
+  <button id="b">¡Ping!</button>
+  <p id="msg" role="status" aria-live="polite"></p>
+</main>
+<script>
+  const b = document.getElementById('b'), msg = document.getElementById('msg');
+  b.onclick = async () => {
+    b.disabled = true; // debounce: re-enabled when the server says this client may ping again
+    try {
+      const r = await fetch('ping', { method: 'POST' });
+      const j = await r.json();
+      msg.textContent = r.ok
+        ? `En cola (posición ${j.position}). Próximo ping en ${j.retry} s.`
+        : `${j.error}. Reintenta en ${j.retry} s.`;
+      setTimeout(() => b.disabled = false, j.retry * 1000);
+    } catch {
+      msg.textContent = 'Sin conexión: el PC puede estar apagado.';
+      b.disabled = false;
+    }
+  };
+</script>
+</html>

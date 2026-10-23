@@ -24,6 +24,8 @@ Copy `teams_monitor.example.xml` to `teams_monitor.xml` next to the exe. It sets
 | `--headless` | false | no tray icon / toasts |
 | `--interval 1s` | 1s | poll interval |
 | `--debounce 2` | 2 | consecutive readings to change state |
+| `--web 127.0.0.1:8080` | off | teammate ping page (see section 5) |
+| `--web-cooldown 30s` | 30s | minimum time between pings from one client |
 
 Try it by hand first: `teams_monitor.exe --serial COM3`, join a Teams call, and watch the tray icon turn red.
 
@@ -92,3 +94,21 @@ pio device monitor                       # shows "teams_led ready" and, with WiF
 Without `secrets.h` the board only accepts serial commands. In the serial monitor, type `CALL_ON` or `CALL_OFF`. The ring turns red or off, and the board replies `OK ...`.
 
 Then run the PC app with `--serial COM3` or `--http http://<ip printed above>/led`. Reserve that IP in your router so it doesn't change. A board other than NodeMCU (e.g. D1 mini) needs `board = d1_mini` in `platformio.ini`.
+
+## 5. Teammate ping page (Tailscale Funnel)
+
+With `<web listen="127.0.0.1:8080"/>` (or `--web 127.0.0.1:8080`) the app serves a one-button page. Each press queues a 5 s disco effect (`FX 4`), after which the ring goes back to the real call state. Limits: one ping per client per `cooldown`, and at most 10 queued pings (more get HTTP 429). Keep the listen address on `127.0.0.1` so LAN clients can't reach it directly.
+
+Tailscale Funnel publishes it at a fixed HTTPS URL. It works with a dynamic IP, without opening router ports, and without a domain, because the PC makes an outbound connection:
+
+1. Install Tailscale (`winget install Tailscale.Tailscale`) and sign in.
+2. Publish the page. The first run prints a link to enable HTTPS and Funnel for the tailnet; open it and approve:
+   ```powershell
+   tailscale funnel --bg 8080
+   ```
+   `--bg` keeps it configured across reboots, since the Tailscale service runs it. The URL is `https://<pc-name>.<tailnet>.ts.net/`; `tailscale funnel status` shows it.
+3. Share that URL with teammates. They don't need Tailscale.
+
+Stop publishing with `tailscale funnel reset`. When the PC or the app is off, the URL returns an error and the page says the PC may be off.
+
+The page has no login: anyone with the URL can ping, within the limits above. Clients are identified by the last `X-Forwarded-For` entry that Funnel adds. The log (`web: ping from <ip>`) shows which IP was used. If it shows `127.0.0.1` for everyone, all clients share one cooldown. Teammates behind the same office NAT share one IP, so they also share one cooldown.

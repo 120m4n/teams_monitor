@@ -75,6 +75,7 @@ pkg/detector/       detección WASAPI (Windows) + lógica de nombres (portable)
 pkg/events/         polling, debounce, máquina de estados
 pkg/ui/             bandeja, notificaciones, inicio automático, iconos
 pkg/actuator/       actuadores serial y HTTP
+pkg/web/            página de ping para teammates (cola + cooldown por IP)
 firmware/esp8266/   firmware del anillo LED
 deploy/             install-task.ps1 (tarea programada con watchdog), flash.ps1 (secrets.h desde el XML + flasheo)
 docs/               especificación (README.md) e instalación (INSTALL.md)
@@ -103,6 +104,8 @@ Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -Fi
 | `--interval 1s` | 1s | intervalo de consulta |
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
 | `--fx 3` | XML o -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
+| `--web 127.0.0.1:8080` | XML o desactivado | página de ping para teammates |
+| `--web-cooldown 30s` | XML o 30s | tiempo mínimo entre pings de un mismo cliente |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -177,6 +180,30 @@ En `teams_monitor.xml` pon `mode="http"` y completa `<wifi>` (SSID, contraseña,
 El procedimiento completo (flasheo, IP fija, alimentación y pruebas) está en [firmware/esp8266/README.md](firmware/esp8266/README.md#modo-wifi-alimentación-externa-sin-usb-al-pc).
 
 Más trucos del hardware (pinout, anillo que no enciende, puerto ocupado) en [firmware/esp8266/README.md](firmware/esp8266/README.md#trucos).
+
+## Control web para teammates (Tailscale Funnel)
+
+Una página con un solo botón para que tus compañeros hagan parpadear el anillo desde el navegador. Cada pulsación pone en cola un efecto disco de 5 s (`FX 4`). Después, el anillo vuelve al estado real: en llamada o apagado.
+
+```
+navegador ──HTTPS──► Tailscale Funnel ──túnel saliente──► tailscaled (PC) ──► 127.0.0.1:8080 (teams_monitor) ──► ESP8266
+```
+
+- **Sin abrir puertos, sin IP fija y sin dominio**: el PC abre una conexión saliente hacia Tailscale, así que funciona con IP dinámica y con CGNAT.
+- **El ESP8266 no queda expuesto**: el servidor web vive dentro de la app y escucha solo en `127.0.0.1`. La app reenvía el comando por los actuadores que ya tiene, sea serial o HTTP.
+- **Límites**: un ping por cliente cada `cooldown` (30 s por defecto) y como mucho 10 pings en cola. A partir de ahí el servidor responde HTTP 429 y la página indica cuándo reintentar. El botón queda desactivado mientras dura el cooldown.
+- **Solo funciona con el PC encendido y la app corriendo**. Si no, la página avisa de que el PC puede estar apagado.
+
+Puesta en marcha:
+
+1. En `teams_monitor.xml`: `<web listen="127.0.0.1:8080" cooldown="30"/>`. Reinicia la app.
+2. `winget install Tailscale.Tailscale` e inicia sesión.
+3. `tailscale funnel --bg 8080`. La primera vez da un enlace para activar HTTPS y Funnel en el tailnet.
+4. Comparte `https://<pc>.<tailnet>.ts.net/` (lo muestra `tailscale funnel status`). Los teammates no necesitan Tailscale.
+
+Para dejar de publicar: `tailscale funnel reset`.
+
+Advertencias: la página no tiene login, así que cualquiera con la URL puede hacer ping, dentro de los límites. El cliente se identifica por la última entrada de `X-Forwarded-For` que añade Funnel. El log muestra `web: ping from <ip>`: si sale `127.0.0.1` para todos, el cooldown se comparte entre todos. Los compañeros detrás de la misma NAT de oficina comparten IP y, por tanto, cooldown. Un ping durante una llamada reinicia el temporizador de efectos del firmware. Más detalle en [docs/INSTALL.md](docs/INSTALL.md#5-teammate-ping-page-tailscale-funnel).
 
 ## Simular una llamada (sin Teams)
 

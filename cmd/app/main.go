@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -21,6 +22,7 @@ import (
 	"teams_monitor/pkg/detector"
 	"teams_monitor/pkg/events"
 	"teams_monitor/pkg/ui"
+	"teams_monitor/pkg/web"
 )
 
 func main() {
@@ -46,6 +48,8 @@ func main() {
 	httpURL := flag.String("http", cfg.HTTPURL(), "ESP32 HTTP endpoint, e.g. http://192.168.1.50/led")
 	interval := flag.Duration("interval", time.Second, "detector poll interval")
 	debounce := flag.Int("debounce", 2, "consecutive readings needed to change state")
+	webAddr := flag.String("web", cfg.Web.Listen, "serve the teammate ping page here, e.g. 127.0.0.1:8080 (publish with tailscale funnel)")
+	webCooldown := flag.Duration("web-cooldown", time.Duration(cfg.Web.Cooldown)*time.Second, "minimum time between pings from one client")
 	fx := flag.Int("fx", cfg.FX, "force LED effect 0-4 during calls (fade-in, clock, voice, scanner, disco); -1 follows call length")
 	flag.Parse()
 
@@ -83,6 +87,20 @@ func main() {
 		log.Printf("state: %v", s)
 		actuate(s == events.StateInCall)
 	})
+
+	if *webAddr != "" {
+		ping := func() {
+			for _, a := range acts {
+				if err := a.Send("FX 4\n"); err != nil { // disco
+					log.Printf("actuator: %v", err)
+				}
+			}
+			time.Sleep(5 * time.Second)
+			actuate(mgr.State() == events.StateInCall) // back to the real state (restarts the call-length timeline)
+		}
+		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(ping, *webCooldown))) }()
+		log.Printf("web: ping page on http://%s", *webAddr)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

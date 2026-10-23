@@ -17,8 +17,10 @@ func NewHTTPActuator(url string) *HTTPActuator {
 	return &HTTPActuator{URL: url, Client: &http.Client{Timeout: 3 * time.Second}}
 }
 
-func (a *HTTPActuator) SetCallState(active bool) error {
-	resp, err := a.Client.Post(a.URL, "text/plain", strings.NewReader(payload(active)))
+func (a *HTTPActuator) SetCallState(active bool) error { return a.Send(payload(active)) }
+
+func (a *HTTPActuator) Send(msg string) error {
+	resp, err := a.Client.Post(a.URL, "text/plain", strings.NewReader(msg))
 	if err != nil {
 		return err
 	}

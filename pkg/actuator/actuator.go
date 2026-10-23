@@ -3,6 +3,7 @@ package actuator
 
 type Actuator interface {
 	SetCallState(active bool) error
+	Send(msg string) error // raw firmware command, e.g. "FX 4\n"
 }
 
 // OnPayload is sent when a call starts. Set it to e.g. "FX 3\n" before use to force a

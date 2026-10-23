@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -49,6 +50,7 @@ func main() {
 	httpURL := flag.String("http", cfg.HTTPURL(), "ESP32 HTTP endpoint, e.g. http://192.168.1.50/led")
 	interval := flag.Duration("interval", time.Second, "detector poll interval")
 	debounce := flag.Int("debounce", 2, "consecutive readings needed to change state")
+	resync := flag.Duration("resync", 30*time.Second, "resend the current state this often, so a board that rebooted catches up; 0 disables")
 	webAddr := flag.String("web", cfg.Web.Listen, "serve the teammate ping page here, e.g. 127.0.0.1:8080 (publish with tailscale funnel)")
 	webCooldown := flag.Duration("web-cooldown", time.Duration(cfg.Web.Cooldown)*time.Second, "minimum time between pings from one client")
 	webDuration := flag.Duration("web-duration", time.Duration(cfg.Web.Duration)*time.Second, "how long one ping plays, 1s-60s")
@@ -78,13 +80,9 @@ func main() {
 	if *httpURL != "" {
 		acts = append(acts, actuator.NewHTTPActuator(*httpURL))
 	}
-	actuate := func(active bool) {
-		for _, a := range acts {
-			if err := a.SetCallState(active); err != nil {
-				log.Printf("actuator: %v", err)
-			}
-		}
-	}
+	ring := actuator.NewGroup(acts...)
+	actuate := ring.SetCallState
+	var pinging atomic.Bool // a teammate ping is playing: the resync must not cut it short
 
 	mgr := events.NewManager(detector.IsTeamsCallActive)
 	mgr.Interval, mgr.Debounce = *interval, *debounce
@@ -101,13 +99,11 @@ func main() {
 			log.Fatalf("web fx %d: want 0-%d", *webFX, len(web.Effects)-1)
 		}
 		ping := func(fx int) {
-			for _, a := range acts {
-				if err := a.Send(fmt.Sprintf("FX %d\n", fx)); err != nil {
-					log.Printf("actuator: %v", err)
-				}
-			}
+			pinging.Store(true)
+			defer pinging.Store(false)
+			ring.Send(fmt.Sprintf("FX %d\n", fx))
 			time.Sleep(*webDuration)
-			actuate(mgr.State() == events.StateInCall) // back to the real state (restarts the call-length timeline)
+			ring.Sync(func() bool { return mgr.State() == events.StateInCall }) // back to the real state (restarts the call-length timeline)
 		}
 		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Name: strings.TrimSpace(*webName)}
 		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(ping, opts))) }()
@@ -117,6 +113,24 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	actuate(false) // sync the LED ring with our initial Idle state
+	if *resync > 0 {
+		// The board only hears about transitions. If it reboots mid-call (brownout, crash, WiFi
+		// drop) it wakes up dark, so resend the state; a repeated CALL_ON keeps the call timer.
+		go func() {
+			t := time.NewTicker(*resync)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					if !pinging.Load() {
+						ring.Sync(func() bool { return mgr.State() == events.StateInCall })
+					}
+				}
+			}
+		}()
+	}
 	log.Printf("started (headless=%v)", *headless)
 	done := make(chan struct{})
 	go func() {

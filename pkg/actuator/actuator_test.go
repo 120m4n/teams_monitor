@@ -2,6 +2,7 @@ package actuator
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -70,5 +71,38 @@ func TestSerialReconnect(t *testing.T) {
 	}
 	if ports[0].written[0] != "CALL_ON\n" || ports[1].written[0] != "CALL_OFF\n" {
 		t.Fatalf("writes: %q / %q", ports[0].written, ports[1].written)
+	}
+}
+
+type fakeActuator struct {
+	sent []string
+	err  error
+}
+
+func (f *fakeActuator) SetCallState(active bool) error { return f.Send(payload(active)) }
+func (f *fakeActuator) Send(msg string) error {
+	f.sent = append(f.sent, msg)
+	return f.err
+}
+
+func TestGroupLogsErrorChangesOnly(t *testing.T) {
+	a := &fakeActuator{}
+	g := NewGroup(a)
+	var logs []string
+	g.Logf = func(format string, args ...any) { logs = append(logs, fmt.Sprintf(format, args...)) }
+
+	g.SetCallState(true)
+	a.err = errors.New("timeout")
+	g.Sync(func() bool { return true }) // board gone: logged once...
+	g.Sync(func() bool { return true }) // ...not on every resync
+	a.err = nil
+	g.Send("FX 4\n") // back
+	g.SetCallState(false)
+
+	if want := []string{"CALL_ON\n", "CALL_ON\n", "CALL_ON\n", "FX 4\n", "CALL_OFF\n"}; !reflect.DeepEqual(a.sent, want) {
+		t.Errorf("sent %q, want %q", a.sent, want)
+	}
+	if want := []string{"actuator: timeout", "actuator: ok again"}; !reflect.DeepEqual(logs, want) {
+		t.Errorf("logs %q, want %q", logs, want)
 	}
 }

@@ -37,8 +37,21 @@ No entran en el timeline de la llamada. Los usa la página de ping para compañe
 |---|---|---|
 | `CALL_ON` | `OK CALL_ON` | empieza la llamada y sigue el timeline |
 | `CALL_OFF` | `OK CALL_OFF` | fade-out y apagado |
-| `FX <0-10>` | `OK FX 3 scanner` | fuerza un efecto (para pruebas) hasta el siguiente `CALL_ON` o `CALL_OFF` |
+| `FX <0-10>` | `OK FX 3 scanner` | fuerza un efecto (para pruebas) hasta el siguiente `CALL_ON` o `CALL_OFF`; repetir el mismo `FX` no lo reinicia |
 | cualquier otro | `ERR <texto>` | se ignora (por HTTP devuelve 400) |
+
+### Diagnóstico: ¿se reinició la placa?
+
+Al arrancar, la placa escribe por serial `teams_led ready, last reset: <motivo>`. Con WiFi, abre `http://<ip>/` en el navegador: responde `teams_led up <segundos> s, last reset: <motivo>`. Si los segundos son pocos y estabas en una llamada, la placa se reinició.
+
+| Motivo | Qué suele significar |
+|---|---|
+| `Power On` | se conectó la alimentación (o se cortó y volvió) |
+| `External System` | botón RST o reinicio al flashear |
+| `Brownout` | caída de tensión: fuente o cable USB flojos, sobre todo con muchos LEDs encendidos |
+| `Exception` / `Software Watchdog` / `Hardware Watchdog` | fallo del firmware |
+
+La app reenvía el estado cada 30 s (`--resync`), así que tras un reinicio el anillo vuelve a animarse solo. Apagado, el firmware repinta el anillo en negro cada segundo, así que si un ruido en la línea de datos enciende un LED, se apaga solo.
 
 ## Pinout
 

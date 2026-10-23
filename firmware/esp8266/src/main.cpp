@@ -176,7 +176,15 @@ void render() {
   if (on) {
     master = 255;
   } else {
-    if (!master) return;  // already dark
+    if (!master) {  // already dark: repaint black once a second, so a glitch on the data line can't stick
+      static uint32_t lastClear = 0;
+      if (now - lastClear >= 1000) {
+        lastClear = now;
+        ring.clear();
+        ring.show();
+      }
+      return;
+    }
     uint32_t dt = now - offAt;
     master = dt >= FADE_OUT_MS ? 0 : 255 - dt * 255 / FADE_OUT_MS;
     if (!master) {
@@ -215,9 +223,9 @@ bool handleCommand(String cmd) {
   } else if (cmd.startsWith("FX ") && isDigit(cmd[3])) {
     long n = cmd.substring(3).toInt();
     if (n >= FX_COUNT) return false;
+    if (!on || forcedFx != n) onAt = millis();  // the PC resends its state every 30 s: don't restart the effect
     forcedFx = n;
     on = true;
-    onAt = millis();
     cmd += String(" ") + FX_NAMES[n];
   } else {
     return false;
@@ -247,9 +255,12 @@ void setup() {
     bool ok = handleCommand(server.arg("plain"));
     server.send(ok ? 200 : 400, "text/plain", ok ? "OK\n" : "expected CALL_ON, CALL_OFF or FX <n>\n");
   });
+  server.on("/", HTTP_GET, [] {  // health check: open http://<ip>/ to see uptime and why the board last restarted
+    server.send(200, "text/plain", "teams_led up " + String(millis() / 1000) + " s, last reset: " + ESP.getResetReason() + "\n");
+  });
   server.begin();
 #endif
-  Serial.println("teams_led ready");
+  Serial.println("teams_led ready, last reset: " + ESP.getResetReason());
 }
 
 void loop() {

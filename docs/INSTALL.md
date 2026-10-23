@@ -24,6 +24,7 @@ Copy `teams_monitor.example.xml` to `teams_monitor.xml` next to the exe. It sets
 | `--headless` | false | no tray icon / toasts |
 | `--interval 1s` | 1s | poll interval |
 | `--debounce 2` | 2 | consecutive readings to change state |
+| `--resync 30s` | 30s | resend the current state this often, so a board that rebooted catches up; 0 disables |
 | `--web 127.0.0.1:8080` | off | teammate ping page (see section 5) |
 | `--web-cooldown 30s` | 30s | minimum time between pings from one client |
 | `--web-duration 5s` | 5s | how long one ping plays, 1s-60s |
@@ -92,7 +93,7 @@ Flash it with `deploy\flash.ps1` (builds `secrets.h` from `teams_monitor.xml`, c
 cd firmware/esp8266
 cp src/secrets.example.h src/secrets.h   # optional: enables HTTP; edit SSID/password (2.4 GHz only)
 pio run -t upload                        # add --upload-port COM3 (Windows) if needed
-pio device monitor                       # shows "teams_led ready" and, with WiFi, the HTTP URL
+pio device monitor                       # shows "teams_led ready, last reset: <reason>" and, with WiFi, the HTTP URL
 ```
 
 Without `secrets.h` the board only accepts serial commands. In the serial monitor, type `CALL_ON` or `CALL_OFF`. The ring turns red or off, and the board replies `OK ...`.

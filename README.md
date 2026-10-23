@@ -64,6 +64,7 @@ PlatformIO con el core Arduino y Adafruit NeoPixel. Lee líneas por serial a 115
 
 - **Sin servicio de Windows**: los servicios corren en la sesión 0, que no tiene bandeja ni notificaciones y puede no ver la sesión de micrófono de Teams. Por eso la app arranca al iniciar sesión, desde la clave Run o la tarea programada.
 - **Al arrancar y al salir** la app manda `CALL_OFF` para que el anillo no quede encendido.
+- **Reenvío cada 30 s** (`--resync`): la placa solo se entera de las transiciones. Si se reinicia a mitad de llamada (caída de tensión, fallo, WiFi), despierta apagada. La app le reenvía el estado y el anillo se recupera solo, sin reiniciar el cronómetro de la llamada. Mientras suena el ping de un compañero no se reenvía nada. Los errores de envío se registran en el log solo cuando aparecen y cuando se resuelven (`actuator: ok again`). Para saber por qué se reinició, ver [Diagnóstico](firmware/esp8266/README.md#diagnóstico-se-reinició-la-placa).
 
 ## Estructura
 
@@ -103,6 +104,7 @@ Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -Fi
 | `--headless` | false | sin bandeja ni notificaciones |
 | `--interval 1s` | 1s | intervalo de consulta |
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
+| `--resync 30s` | 30s | reenvía el estado al anillo cada tanto, por si la placa se reinició; 0 lo desactiva |
 | `--fx 3` | XML o -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco, 5–10 [extras](firmware/esp8266/README.md#efectos-extra-solo-con-fx-n)); -1 sigue la duración de la llamada |
 | `--web 127.0.0.1:8080` | XML o desactivado | página de ping para teammates |
 | `--web-duration 5s` | XML o 5s | cuánto dura un ping (1s–60s) |

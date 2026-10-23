@@ -2,14 +2,20 @@ package web
 
 import (
 	"encoding/json"
+	"io"
+	"strings"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
 
-func post(h http.Handler, remote, xff string) int {
-	r := httptest.NewRequest("POST", "/ping", nil)
+var opts = Options{Cooldown: time.Hour, Duration: 5 * time.Second, FX: 4, PickFX: true}
+
+func post(h http.Handler, remote, xff string) int { return postURL(h, "/ping", remote, xff) }
+
+func postURL(h http.Handler, url, remote, xff string) int {
+	r := httptest.NewRequest("POST", url, nil)
 	r.RemoteAddr = remote
 	if xff != "" {
 		r.Header.Set("X-Forwarded-For", xff)
@@ -22,7 +28,7 @@ func post(h http.Handler, remote, xff string) int {
 func TestPing(t *testing.T) {
 	block := make(chan struct{})
 	defer close(block)
-	h := New(func() { <-block }, time.Hour) // the first ping never finishes, so the queue fills up
+	h := New(func(int) { <-block }, opts) // the first ping never finishes, so the queue fills up
 
 	if c := post(h, "203.0.113.1:5000", ""); c != http.StatusAccepted {
 		t.Fatalf("first ping: %d", c)
@@ -71,7 +77,7 @@ func getStatus(t *testing.T, h http.Handler, remote string) status {
 
 func TestStatus(t *testing.T) {
 	release := make(chan struct{})
-	h := New(func() { <-release }, time.Hour)
+	h := New(func(int) { <-release }, opts)
 	a, b, c := "203.0.113.1:1", "203.0.113.2:1", "203.0.113.3:1"
 
 	post(h, a, "")
@@ -105,4 +111,47 @@ func TestStatus(t *testing.T) {
 		t.Errorf("c after a: %+v", st)
 	}
 	close(release)
+}
+
+func TestPickFX(t *testing.T) {
+	played := make(chan int, 4)
+	h := New(func(fx int) { played <- fx }, opts)
+	for _, c := range []struct {
+		url  string
+		code int
+		fx   int
+	}{
+		{"/ping?fx=2", http.StatusAccepted, 2},
+		{"/ping", http.StatusAccepted, 4}, // default
+		{"/ping?fx=9", http.StatusBadRequest, -1},
+		{"/ping?fx=x", http.StatusBadRequest, -1},
+	} {
+		if code := postURL(h, c.url, "203.0.113."+c.url[len(c.url)-1:]+":1", ""); code != c.code {
+			t.Fatalf("%s: %d, want %d", c.url, code, c.code)
+		}
+		if c.fx >= 0 {
+			if fx := <-played; fx != c.fx {
+				t.Errorf("%s played fx %d, want %d", c.url, fx, c.fx)
+			}
+		}
+	}
+
+	off := opts
+	off.PickFX = false
+	h = New(func(fx int) { played <- fx }, off)
+	postURL(h, "/ping?fx=2", "203.0.113.50:1", "")
+	if fx := <-played; fx != 4 {
+		t.Errorf("pickfx off played fx %d, want the default 4", fx)
+	}
+}
+
+func TestPageName(t *testing.T) {
+	o := opts
+	o.Name = `Ana "<b>"`
+	w := httptest.NewRecorder()
+	New(func(int) {}, o).ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	body, _ := io.ReadAll(w.Body)
+	if !strings.Contains(string(body), `data-name="Ana &#34;&lt;b&gt;&#34;"`) || strings.Contains(string(body), "{{NAME}}") {
+		t.Fatalf("name not filled in escaped: %.200s", body)
+	}
 }

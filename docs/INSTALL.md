@@ -26,6 +26,10 @@ Copy `teams_monitor.example.xml` to `teams_monitor.xml` next to the exe. It sets
 | `--debounce 2` | 2 | consecutive readings to change state |
 | `--web 127.0.0.1:8080` | off | teammate ping page (see section 5) |
 | `--web-cooldown 30s` | 30s | minimum time between pings from one client |
+| `--web-duration 5s` | 5s | how long one ping plays, 1s-60s |
+| `--web-fx 4` | 4 | default ping effect 0-4 |
+| `--web-pickfx=false` | true | hide the effect menu; always use the default effect |
+| `--web-name Germán` | empty | whose ring it is, shown on the page; read at startup |
 
 Try it by hand first: `teams_monitor.exe --serial COM3`, join a Teams call, and watch the tray icon turn red.
 
@@ -97,7 +101,7 @@ Then run the PC app with `--serial COM3` or `--http http://<ip printed above>/le
 
 ## 5. Teammate ping page (Tailscale Funnel)
 
-With `<web listen="127.0.0.1:8080"/>` (or `--web 127.0.0.1:8080`) the app serves a one-button page. Each press queues a 5 s disco effect (`FX 4`), after which the ring goes back to the real call state. Limits: one ping per client per `cooldown`, and at most 10 queued pings (more get HTTP 429). Keep the listen address on `127.0.0.1` so LAN clients can't reach it directly.
+With `<web listen="127.0.0.1:8080"/>` (or `--web 127.0.0.1:8080`) the app serves a one-button page. Each press queues an effect (`FX <n>`) for `duration` seconds (default 5), after which the ring goes back to the real call state. Visitors pick the effect from a menu, or leave it on the default (`fx`, disco unless set). `pickfx="false"` hides the menu and makes the server ignore `?fx=`. `name` is the owner shown on the page ("tu compañero" if empty). It is filled into the page at startup, so changing it needs an app restart. Limits: one ping per client per `cooldown`, and at most 10 queued pings (more get HTTP 429). Keep the listen address on `127.0.0.1` so LAN clients can't reach it directly.
 
 Tailscale Funnel publishes it at a fixed HTTPS URL. It works with a dynamic IP, without opening router ports, and without a domain, because the PC makes an outbound connection:
 

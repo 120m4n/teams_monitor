@@ -17,7 +17,7 @@ func write(t *testing.T, s string) string {
 
 func TestLoadMissing(t *testing.T) {
 	c, err := Load(filepath.Join(t.TempDir(), "none.xml"))
-	if err != nil || c.FX != -1 || c.Actuator.Serial.Baud != 115200 || c.SerialPort() != "" || c.HTTPURL() != "" || c.Web.Listen != "" || c.Web.Cooldown != 30 {
+	if err != nil || c.FX != -1 || c.Actuator.Serial.Baud != 115200 || c.SerialPort() != "" || c.HTTPURL() != "" || c.Web.Listen != "" || c.Web.Cooldown != 30 || c.Web.Duration != 5 || c.Web.FX != 4 || !c.Web.PickFX {
 		t.Fatalf("got %+v, %v", c, err)
 	}
 }
@@ -28,7 +28,7 @@ func TestLoadBoth(t *testing.T) {
   <actuator mode="both"><serial port="COM16"/></actuator>
   <wifi ssid="net" password="pw" ip="192.168.1.50" gateway="192.168.1.1" subnet="255.255.255.0"/>
   <fx>3</fx>
-  <web listen="127.0.0.1:8080" cooldown="10"/>
+  <web listen="127.0.0.1:8080" cooldown="10" duration="8" fx="2" pickfx="false" name="Ana"/>
 </teamsMonitor>`))
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestLoadBoth(t *testing.T) {
 	if !slices.Equal(c.Processes, []string{"ms-teams.exe", "zoom.exe"}) {
 		t.Errorf("processes = %v", c.Processes)
 	}
-	if c.SerialPort() != "COM16" || c.Actuator.Serial.Baud != 115200 || c.HTTPURL() != "http://192.168.1.50/led" || c.FX != 3 || c.Web.Listen != "127.0.0.1:8080" || c.Web.Cooldown != 10 {
+	if c.SerialPort() != "COM16" || c.Actuator.Serial.Baud != 115200 || c.HTTPURL() != "http://192.168.1.50/led" || c.FX != 3 || c.Web.Listen != "127.0.0.1:8080" || c.Web.Cooldown != 10 || c.Web.Duration != 8 || c.Web.FX != 2 || c.Web.PickFX || c.Web.Name != "Ana" {
 		t.Errorf("got %+v", c)
 	}
 }

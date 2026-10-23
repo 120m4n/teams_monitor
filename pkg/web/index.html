@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-name="{{NAME}}">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aro LED</title>
@@ -81,7 +81,7 @@
   .core > * { grid-area: 1 / 1; }
   .collar { width: calc(var(--size) * .62); height: auto; }
   .collar text { font: 700 14px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: .08em; fill: var(--collar-ink); }
-  [data-mode="disco"] .collar { animation: spin 1.2s linear infinite; }
+  [data-mode="play"] .collar { animation: spin 1.2s linear infinite; }
   [data-mode="offline"] .collar { filter: grayscale(1); }
 
   #go {
@@ -108,8 +108,15 @@
     font: 400 calc(var(--size) * .26) / 1 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; color: #fff;
     -webkit-text-stroke: 3px var(--estop-lo); paint-order: stroke; text-shadow: 0 6px 0 var(--estop-lo);
   }
-  [data-mode="disco"] .burst { animation: burst 1.1s cubic-bezier(.2, 1.6, .4, 1) both; }
+  [data-mode="play"] .burst { animation: burst 1.1s cubic-bezier(.2, 1.6, .4, 1) both; }
 
+  .pick { display: flex; gap: 10px; align-items: center; justify-content: center; margin: 6px 0 0; font-weight: 700; }
+  .pick[hidden] { display: none; }
+  .pick select {
+    font: inherit; font-weight: 400; color: var(--ink); background: var(--bench);
+    border: 2px solid var(--muted); border-radius: 10px; padding: 6px 10px; min-height: 44px; max-width: 70vw;
+  }
+  .pick select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   #tag { min-height: 1.5em; margin: 4px 0 0; font-weight: 700; color: var(--muted); }
   #msg { min-height: 3em; margin: 4px 0 0; font-weight: 700; }
   #queue { margin: 0; font-size: 1.8rem; letter-spacing: .15em; min-height: 0; }
@@ -142,12 +149,12 @@
 
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation: none !important; transition: none !important; }
-    [data-mode="disco"] .burst, [data-mode="offline"] .zzz { opacity: 1; }
+    [data-mode="play"] .burst, [data-mode="offline"] .zzz { opacity: 1; }
   }
 </style>
 
 <main>
-  <h1>El aro de <span class="v">Germán</span></h1>
+  <h1>El aro de <span class="v"></span></h1>
   <p class="sub">Este botón enciende de verdad el aro LED de su escritorio.</p>
 
   <div class="ring" id="ring" data-mode="idle">
@@ -165,6 +172,10 @@
     <span class="zzz" aria-hidden="true">Z z z</span>
   </div>
 
+  <p class="pick" id="pick" hidden>
+    <label for="fx">Animación</label>
+    <select id="fx"></select>
+  </p>
   <p id="tag"></p>
   <p id="queue" aria-hidden="true" hidden></p>
   <p id="msg" role="status" aria-live="polite"></p>
@@ -179,12 +190,12 @@
 
 <script>
 'use strict';
-const VICTIM = 'Germán';  // whose ring this is: change to your name
-const PLAY_MS = 5000;     // how long the real ring plays one ping (cmd/app/main.go)
+const VICTIM = document.documentElement.dataset.name || 'tu compañero'; // <web name="..."> in teams_monitor.xml
+let PLAY_MS = 5000;       // how long the real ring plays one ping; GET config overrides it
 const POLL_MS = 700;      // GET status interval while queued
 
 const $ = id => document.getElementById(id);
-const ring = $('ring'), btn = $('go'), face = $('face'), msg = $('msg'), tag = $('tag'),
+const fxSel = $('fx'), ring = $('ring'), btn = $('go'), face = $('face'), msg = $('msg'), tag = $('tag'),
   queue = $('queue'), retry = $('retry'), mute = $('mute'), count = $('count');
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const calm = () => reduced.matches;
@@ -212,6 +223,16 @@ for (let i = 0, row = 0, col = 0; i < 12; i++) {
   leds.push(d);
 }
 
+// Firmware effects (FX <n>), with what the page says while one plays.
+const EFFECTS = [
+  ['Encendido suave', 'encendiéndose despacito'],
+  ['Reloj', 'marcando los segundos'],
+  ['Vúmetro', 'hablando más que tú en las dailies'],
+  ['Coche fantástico', 'en modo coche fantástico'],
+  ['Discoteca', 'de fiesta'],
+];
+const CFG = { fx: 4, pickfx: false };
+
 const RED = '#ff2b22', AMBER = '#ffb000', ORANGE = '#ff7a00', GRAY = '#9aa4b2', GREEN = '#22ff88';
 const wave = (t, period) => .5 - .5 * Math.cos(t / period * 2 * Math.PI);
 // Fraction of LED i still lit in a countdown: the ring empties counterclockwise from LED 11.
@@ -224,7 +245,7 @@ const LOOKS = {
   idle: (i, t) => [RED, calm() ? .45 : .15 + .45 * wave(t, 3600)],
   sending: (i, t) => [RED, Math.max(.05, 1 - ((Math.floor(t / (calm() ? 160 : 70)) - i + 1200) % 12) * .3)],
   queued: (i, t) => [RED, i === Math.floor(t / 500) % 12 ? .85 : .12],
-  disco: (i, t) => [`hsl(${(i * 30 + (calm() ? 0 : t * .45)) % 360} 100% 55%)`, calm() ? .85 : .55 + .45 * wave(t + i * 120, 420)],
+  play: (i, t) => FX_LOOKS[S.fx](i, t),
   cooldown: (i, t, now) => [RED, lit(i, now) * .8],
   soon: (i, t, now) => [AMBER, lit(i, now) * (calm() || t > 1600 || Math.floor(t / 160) % 2 ? .95 : .08)],
   full: () => [ORANGE, .7],
@@ -232,8 +253,26 @@ const LOOKS = {
   egg: (i, t) => [GREEN, calm() ? .8 : (Math.floor(t / 70) + i) % 3 === 0 ? 1 : .12],
 };
 
-// ---- State machine: idle → sending → queued → disco → cooldown → idle, plus soon / full / offline / egg ----
-const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, ahead: 0, taps: 0 };
+// Page versions of the firmware effects (firmware/esp8266/src/main.cpp), same order as EFFECTS.
+const noise = n => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
+const FX_LOOKS = [
+  (i, t) => [RED, Math.min(1, t / 2000)],                                     // fade-in
+  (i, t) => [RED, i === Math.floor(t / 1000) % 12 ? 1 : .06],                 // clock: second hand
+  (i, t) => {                                                                 // voice: VU meter up both sides
+    const level = (n => n < .3 ? 0 : 2 + n * 4)(noise(calm() ? 1 : Math.floor(t / 120)));
+    const k = i < 6 ? i : 11 - i;
+    return [`hsl(${k * 8} 100% 50%)`, Math.max(.04, Math.min(1, level - k))];
+  },
+  (i, t) => {                                                                 // scanner: eye sweeping back and forth
+    const step = Math.floor(t / (calm() ? 200 : 80)) % 22, pos = step < 12 ? step : 22 - step;
+    return [RED, Math.max(.04, 1 - Math.abs(i - pos) * .4)];
+  },
+  (i, t) => [`hsl(${(i * 30 + (calm() ? 0 : t * .45)) % 360} 100% 55%)`,     // disco: spinning rainbow
+    calm() ? .85 : .55 + .45 * wave(t + i * 120, 420)],
+];
+
+// ---- State machine: idle → sending → queued → play → cooldown → idle, plus soon / full / offline / egg ----
+const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, ahead: 0, taps: 0, fx: 4 };
 
 function go(mode, text, after) {
   S.mode = mode;
@@ -255,8 +294,8 @@ const cooldown = () => S.until > performance.now()
   : idle();
 const offline = () => go('offline', `El PC de ${VICTIM} está dormido o apagado. Zzz…`);
 
-function disco() {
-  go('disco', `¡PING! El aro de ${VICTIM} está de fiesta.`, [PLAY_MS, cooldown]);
+function play() {
+  go('play', `¡PING! El aro de ${VICTIM} está ${EFFECTS[S.fx][1]}.`, [PLAY_MS, cooldown]);
   confetti();
   sfx('disco');
 }
@@ -264,10 +303,12 @@ function disco() {
 async function send() {
   go('sending', 'Enviando ping…');
   sfx('press');
+  const picked = CFG.pickfx && fxSel.value !== '';
+  S.fx = picked ? Number(fxSel.value) : CFG.fx;
   let r, j;
   try {
     [r] = await Promise.all([
-      fetch('ping', { method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }),
+      fetch(picked ? 'ping?fx=' + fxSel.value : 'ping', { method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }),
       new Promise(ok => setTimeout(ok, 600)), // let the scanner spin a little
     ]);
     j = await r.json();
@@ -282,6 +323,8 @@ async function send() {
     S.ahead = -1; // unknown until the first status
     go('queued', 'En cola…');
     poll();
+  } else if (r.status === 400) {
+    go('idle', `${j.error}. Elige otra.`);
   } else if (r.status === 429 && j.error === 'Cola llena') {
     go('full', `Hay atasco, vuelve en ${secs} s.`, [S.total, idle]);
   } else if (r.status === 429) {
@@ -292,7 +335,7 @@ async function send() {
   }
 }
 
-// While queued, ask the server where our ping is; the disco starts when the real ring plays it.
+// While queued, ask the server where our ping is; the animation starts when the real ring plays it.
 async function poll() {
   if (S.mode !== 'queued') return;
   let st;
@@ -302,7 +345,7 @@ async function poll() {
     return offline();
   }
   if (S.mode !== 'queued') return;
-  if (st.playing) return disco();
+  if (st.playing) return play();
   if (!st.position) return cooldown(); // it played between two polls
   if (st.ahead !== S.ahead) {
     S.ahead = st.ahead;
@@ -339,7 +382,7 @@ retry.addEventListener('click', send);
 
 // ---- Render loop ----
 const FACE = {
-  idle: () => 'PING', sending: () => '···', disco: () => '¡YA!', offline: () => 'Zzz', egg: () => '🏆',
+  idle: () => 'PING', sending: () => '···', play: () => '¡YA!', offline: () => 'Zzz', egg: () => '🏆',
   queued: () => S.ahead < 0 ? '···' : '#' + (S.ahead + 1),
   cooldown: secsLeft, soon: secsLeft, full: secsLeft,
 };
@@ -414,7 +457,24 @@ mute.addEventListener('click', () => {
   }
 });
 
-// ---- Confetti for the disco ----
+// ---- Effect picker: duration, default effect and whether visitors may pick come from GET config ----
+const FX_KEY = 'fx';
+function fillPicker() {
+  fxSel.replaceChildren(new Option(`Por defecto (${EFFECTS[CFG.fx][0]})`, ''),
+    ...EFFECTS.map(([name], n) => new Option(name, String(n))));
+  try { fxSel.value = localStorage.getItem(FX_KEY) ?? ''; } catch {}
+  if (fxSel.selectedIndex < 0) fxSel.value = '';
+  $('pick').hidden = !CFG.pickfx;
+}
+fxSel.addEventListener('change', () => { try { localStorage.setItem(FX_KEY, fxSel.value); } catch {} });
+fetch('config', { cache: 'no-store' }).then(r => r.json()).then(c => {
+  PLAY_MS = c.duration * 1000;
+  CFG.fx = c.fx;
+  CFG.pickfx = c.pickfx;
+  fillPicker();
+}).catch(() => {}); // the first ping reports the PC as off
+
+// ---- Confetti for the play moment ----
 function confetti() {
   if (calm()) return;
   const box = $('confetti');

@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/windows"
@@ -50,6 +51,10 @@ func main() {
 	debounce := flag.Int("debounce", 2, "consecutive readings needed to change state")
 	webAddr := flag.String("web", cfg.Web.Listen, "serve the teammate ping page here, e.g. 127.0.0.1:8080 (publish with tailscale funnel)")
 	webCooldown := flag.Duration("web-cooldown", time.Duration(cfg.Web.Cooldown)*time.Second, "minimum time between pings from one client")
+	webDuration := flag.Duration("web-duration", time.Duration(cfg.Web.Duration)*time.Second, "how long one ping plays, 1s-60s")
+	webFX := flag.Int("web-fx", cfg.Web.FX, "default ping effect 0-4 (fade-in, clock, voice, scanner, disco)")
+	webName := flag.String("web-name", cfg.Web.Name, "whose ring it is, shown on the ping page")
+	webPickFX := flag.Bool("web-pickfx", cfg.Web.PickFX, "let teammates pick the ping effect on the page")
 	fx := flag.Int("fx", cfg.FX, "force LED effect 0-4 during calls (fade-in, clock, voice, scanner, disco); -1 follows call length")
 	flag.Parse()
 
@@ -89,16 +94,23 @@ func main() {
 	})
 
 	if *webAddr != "" {
-		ping := func() {
+		if *webDuration < time.Second || *webDuration > time.Minute {
+			log.Fatalf("web duration %v: want 1s-60s (each ping holds up the queue this long)", *webDuration)
+		}
+		if *webFX < 0 || *webFX >= web.FXCount {
+			log.Fatalf("web fx %d: want 0-%d", *webFX, web.FXCount-1)
+		}
+		ping := func(fx int) {
 			for _, a := range acts {
-				if err := a.Send("FX 4\n"); err != nil { // disco
+				if err := a.Send(fmt.Sprintf("FX %d\n", fx)); err != nil {
 					log.Printf("actuator: %v", err)
 				}
 			}
-			time.Sleep(5 * time.Second)
+			time.Sleep(*webDuration)
 			actuate(mgr.State() == events.StateInCall) // back to the real state (restarts the call-length timeline)
 		}
-		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(ping, *webCooldown))) }()
+		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Name: strings.TrimSpace(*webName)}
+		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(ping, opts))) }()
 		log.Printf("web: ping page on http://%s", *webAddr)
 	}
 

@@ -29,6 +29,10 @@ type Config struct {
 	Web struct {
 		Listen   string `xml:"listen,attr"`   // e.g. 127.0.0.1:8080; empty: no web page
 		Cooldown int    `xml:"cooldown,attr"` // seconds between pings from one client
+		Duration int    `xml:"duration,attr"` // seconds one ping plays, 1-60
+		FX       int    `xml:"fx,attr"`       // default ping effect 0-4
+		PickFX   bool   `xml:"pickfx,attr"`   // visitors may pick the effect
+		Name     string `xml:"name,attr"`     // whose ring it is, shown on the page
 	} `xml:"web"`
 }
 
@@ -36,7 +40,7 @@ type Config struct {
 func Load(path string) (*Config, error) {
 	c := &Config{FX: -1}
 	c.Actuator.Serial.Baud = 115200
-	c.Web.Cooldown = 30
+	c.Web.Cooldown, c.Web.Duration, c.Web.FX, c.Web.PickFX = 30, 5, 4, true
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil

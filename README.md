@@ -105,6 +105,10 @@ Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -Fi
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
 | `--fx 3` | XML o -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
 | `--web 127.0.0.1:8080` | XML o desactivado | página de ping para teammates |
+| `--web-duration 5s` | XML o 5s | cuánto dura un ping (1s–60s) |
+| `--web-fx 4` | XML o 4 | animación por defecto del ping (0–4, como `--fx`) |
+| `--web-pickfx=false` | XML o true | si es false, se oculta el menú de animaciones y siempre se usa la de por defecto |
+| `--web-name Germán` | XML o vacío | de quién es el aro; aparece en la página. Se lee al arrancar: para cambiarlo hay que relanzar la app |
 | `--web-cooldown 30s` | XML o 30s | tiempo mínimo entre pings de un mismo cliente |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
@@ -183,7 +187,7 @@ Más trucos del hardware (pinout, anillo que no enciende, puerto ocupado) en [fi
 
 ## Control web para teammates (Tailscale Funnel)
 
-Una página con un solo botón para que tus compañeros hagan parpadear el anillo desde el navegador. Cada pulsación pone en cola un efecto disco de 5 s (`FX 4`). Después, el anillo vuelve al estado real: en llamada o apagado.
+Una página con un solo botón para que tus compañeros hagan parpadear el anillo desde el navegador. Cada pulsación pone en cola una animación (`FX <n>`) durante `duration` segundos (5 por defecto). Después, el anillo vuelve al estado real: en llamada o apagado. Desde un menú desplegable, cada visitante elige la animación (encendido suave, reloj, vúmetro, coche fantástico o discoteca) o deja "Por defecto". La página reproduce la misma animación que el aro físico.
 
 ```
 navegador ──HTTPS──► Tailscale Funnel ──túnel saliente──► tailscaled (PC) ──► 127.0.0.1:8080 (teams_monitor) ──► ESP8266
@@ -192,11 +196,12 @@ navegador ──HTTPS──► Tailscale Funnel ──túnel saliente──► t
 - **Sin abrir puertos, sin IP fija y sin dominio**: el PC abre una conexión saliente hacia Tailscale, así que funciona con IP dinámica y con CGNAT.
 - **El ESP8266 no queda expuesto**: el servidor web vive dentro de la app y escucha solo en `127.0.0.1`. La app reenvía el comando por los actuadores que ya tiene, sea serial o HTTP.
 - **Límites**: un ping por cliente cada `cooldown` (30 s por defecto) y como mucho 10 pings en cola. A partir de ahí el servidor responde HTTP 429 y la página indica cuándo reintentar. El botón queda desactivado mientras dura el cooldown. Mientras espera, la página consulta `GET /status` (`{position, ahead, playing}`) para mostrar la fila real y lanza la animación cuando el aro físico empieza a sonar.
+- **Configuración** (`<web>` en el XML o flags): `duration` (1–60 s; cada ping retiene la cola ese tiempo), `fx` (animación por defecto) `pickfx` (`false` oculta el menú y el servidor ignora el `?fx=` que llegue) y `name` (el nombre que aparece en la página, "El aro de …"; sin él dice "tu compañero"). `name` se inserta en la página al arrancar, así que para cambiarlo hay que relanzar la app. La página lo lee de `GET /config`.
 - **Solo funciona con el PC encendido y la app corriendo**. Si no, la página avisa de que el PC puede estar apagado.
 
 Puesta en marcha:
 
-1. En `teams_monitor.xml`: `<web listen="127.0.0.1:8080" cooldown="30"/>`. Reinicia la app.
+1. En `teams_monitor.xml`: `<web listen="127.0.0.1:8080" cooldown="30" duration="5" fx="4" pickfx="true" name="Germán"/>`. Reinicia la app.
 2. `winget install Tailscale.Tailscale` e inicia sesión.
 3. `tailscale funnel --bg 8080`. La primera vez da un enlace para activar HTTPS y Funnel en el tailnet.
 4. Comparte `https://<pc>.<tailnet>.ts.net/` (lo muestra `tailscale funnel status`). Los teammates no necesitan Tailscale.

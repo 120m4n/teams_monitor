@@ -17,8 +17,14 @@ constexpr uint8_t BRIGHTNESS = 80;  // 0-255; full white on 12 LEDs draws ~720 m
 
 Adafruit_NeoPixel ring(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-enum Fx : uint8_t { FX_FADE_IN, FX_CLOCK, FX_VOICE, FX_SCANNER, FX_DISCO, FX_COUNT };
-const char *const FX_NAMES[FX_COUNT] = {"fade-in", "clock", "voice", "scanner", "disco"};
+// The call TIMELINE uses 0-4; 5 and up are only for "FX <n>" (the PC app's teammate ping page).
+// pkg/web Effects must list the same names in the same order (a Go test checks it).
+enum Fx : uint8_t {
+  FX_FADE_IN, FX_CLOCK, FX_VOICE, FX_SCANNER, FX_DISCO,
+  FX_SIREN, FX_HEARTBEAT, FX_PACMAN, FX_ROULETTE, FX_FIRE, FX_COMET, FX_COUNT
+};
+const char *const FX_NAMES[FX_COUNT] = {"fade-in", "clock", "voice", "scanner", "disco",
+                                        "siren", "heartbeat", "pacman", "roulette", "fire", "comet"};
 
 constexpr uint32_t MINUTE = 60000;
 constexpr uint32_t CLOCK_MS = 15 * MINUTE;  // the clock's minute marks fill the ring in this time
@@ -96,6 +102,63 @@ void disco(uint32_t t) {  // spinning rainbow plus random white flashes
   if (random(100) < 10) px(random(LED_COUNT), 0xFFFFFF);
 }
 
+void siren(uint32_t t) {  // police lights: red and blue halves swap every 400 ms, flashing 3 times each
+  bool flip = t / 400 % 2;
+  bool lit = t % 400 / 67 % 2 == 0;
+  for (uint8_t i = 0; i < LED_COUNT; i++) {
+    bool right = i < LED_COUNT / 2;
+    px(i, !lit ? 0 : right == flip ? ring.Color(255, 0, 0) : ring.Color(0, 0, 255));
+  }
+}
+
+void heartbeat(uint32_t t) {  // pum-pum ... pum-pum, once a second, over a dim red glow
+  uint32_t p = t % 1000;
+  float v = p < 120 ? 1 - p / 120.0f : p >= 200 && p < 320 ? 0.7f * (1 - (p - 200) / 120.0f) : 0;
+  fill(ring.Color(20 + 235 * v, 0, 0));
+}
+
+void pacman(uint32_t t) {  // Pac-Man goes clockwise eating a dot on every LED; the dots come back each lap
+  uint8_t pos = t / 150 % LED_COUNT;
+  uint8_t body = (pos + LED_COUNT - 1) % LED_COUNT;
+  bool open = t / 75 % 2;
+  for (uint8_t i = 0; i < LED_COUNT; i++)
+    px(i, i == pos ? (open ? ring.Color(255, 180, 0) : ring.Color(110, 75, 0))
+          : i == body ? ring.Color(255, 180, 0)
+          : i > pos ? ring.Color(35, 35, 35)  // dots not eaten yet this lap
+          : 0);
+}
+
+void roulette(uint32_t t) {  // spins, slows down over SPIN_MS and stops on a random LED, which then blinks
+  constexpr uint32_t SPIN_MS = 3000;
+  static uint32_t last = UINT32_MAX;
+  static uint8_t target = 0;
+  if (t < last) target = random(LED_COUNT);  // a new run
+  last = t;
+  float f = t >= SPIN_MS ? 1 : t / float(SPIN_MS);
+  uint8_t pos = uint32_t((3 * LED_COUNT + target) * (1 - (1 - f) * (1 - f))) % LED_COUNT;  // 3 laps, ease-out
+  uint32_t c = t < SPIN_MS ? ring.Color(255, 0, 0) : t / 250 % 2 ? ring.Color(255, 200, 0) : ring.Color(40, 30, 0);
+  for (uint8_t i = 0; i < LED_COUNT; i++) px(i, i == pos ? c : 0);
+}
+
+void fire(uint32_t) {  // flickering flames: random heat per LED, eased so it doesn't strobe
+  static uint8_t heat[LED_COUNT];
+  for (uint8_t i = 0; i < LED_COUNT; i++) {
+    heat[i] = (heat[i] * 3 + random(60, 256)) / 4;
+    px(i, ring.Color(heat[i], heat[i] * heat[i] / 765, 0));  // hotter = more yellow
+  }
+}
+
+void comet(uint32_t t) {  // a blue-white comet with a fading tail, speeding up to 3.5 laps/s by 6 s
+  static uint8_t tail[LED_COUNT];
+  float s = t / 1000.0f;
+  float laps = s < 6 ? s * (0.5f + s / 4) : 12 + (s - 6) * 3.5f;
+  uint8_t pos = uint32_t(laps * LED_COUNT) % LED_COUNT;
+  for (uint8_t i = 0; i < LED_COUNT; i++) {
+    tail[i] = i == pos ? 255 : tail[i] * 9 / 10;
+    px(i, ring.Color(tail[i] / 3, tail[i] / 2, tail[i]));
+  }
+}
+
 // Returns the effect for `elapsed` ms of call and sets *t to the ms since that effect began.
 Fx currentFx(uint32_t elapsed, uint32_t *t) {
   if (forcedFx >= 0) {
@@ -128,6 +191,12 @@ void render() {
     case FX_CLOCK: clockFace(t); break;
     case FX_VOICE: voice(t); break;
     case FX_SCANNER: scanner(t); break;
+    case FX_SIREN: siren(t); break;
+    case FX_HEARTBEAT: heartbeat(t); break;
+    case FX_PACMAN: pacman(t); break;
+    case FX_ROULETTE: roulette(t); break;
+    case FX_FIRE: fire(t); break;
+    case FX_COMET: comet(t); break;
     default: disco(t); break;
   }
   ring.show();

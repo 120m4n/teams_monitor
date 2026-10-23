@@ -30,7 +30,7 @@ type Config struct {
 		Listen   string `xml:"listen,attr"`   // e.g. 127.0.0.1:8080; empty: no web page
 		Cooldown int    `xml:"cooldown,attr"` // seconds between pings from one client
 		Duration int    `xml:"duration,attr"` // seconds one ping plays, 1-60
-		FX       int    `xml:"fx,attr"`       // default ping effect 0-4
+		FX       int    `xml:"fx,attr"`       // default ping effect, an index into web.Effects
 		PickFX   bool   `xml:"pickfx,attr"`   // visitors may pick the effect
 		Name     string `xml:"name,attr"`     // whose ring it is, shown on the page
 	} `xml:"web"`

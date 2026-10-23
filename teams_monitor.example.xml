@@ -18,7 +18,8 @@
        Pick an address outside the router's DHCP range. Without ssid the firmware is serial-only. -->
   <wifi ssid="your-2.4GHz-ssid" password="your-password" ip="192.168.1.50" gateway="192.168.1.1" subnet="255.255.255.0"/>
 
-  <!-- Force an LED effect during calls (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 follows call length. -->
+  <!-- Force an LED effect during calls (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco,
+       5 siren, 6 heartbeat, 7 pacman, 8 roulette, 9 fire, 10 comet); -1 follows call length. -->
   <fx>-1</fx>
 
   <!-- Teammate ping page, published with Tailscale Funnel (docs/INSTALL.md). Omit the element to disable it.
@@ -33,7 +34,7 @@
   <!-- listen:   address the page is served on; keep it on 127.0.0.1 so only the tunnel reaches it
        cooldown: seconds between pings from one client
        duration: seconds one ping plays on the ring (1-60); the queue waits this long per ping
-       fx:       default ping effect (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco)
+       fx:       default ping effect, same numbers as <fx> above (0-10)
        pickfx:   true shows an effect menu on the page; false always uses fx
        name:     whose ring it is, shown on the page ("El aro de ...") -->
 </teamsMonitor>

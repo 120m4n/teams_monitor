@@ -52,10 +52,10 @@ func main() {
 	webAddr := flag.String("web", cfg.Web.Listen, "serve the teammate ping page here, e.g. 127.0.0.1:8080 (publish with tailscale funnel)")
 	webCooldown := flag.Duration("web-cooldown", time.Duration(cfg.Web.Cooldown)*time.Second, "minimum time between pings from one client")
 	webDuration := flag.Duration("web-duration", time.Duration(cfg.Web.Duration)*time.Second, "how long one ping plays, 1s-60s")
-	webFX := flag.Int("web-fx", cfg.Web.FX, "default ping effect 0-4 (fade-in, clock, voice, scanner, disco)")
+	webFX := flag.Int("web-fx", cfg.Web.FX, "default ping effect, an index into web.Effects (0 fade-in ... 4 disco, 5 siren ... 10 comet)")
 	webName := flag.String("web-name", cfg.Web.Name, "whose ring it is, shown on the ping page")
 	webPickFX := flag.Bool("web-pickfx", cfg.Web.PickFX, "let teammates pick the ping effect on the page")
-	fx := flag.Int("fx", cfg.FX, "force LED effect 0-4 during calls (fade-in, clock, voice, scanner, disco); -1 follows call length")
+	fx := flag.Int("fx", cfg.FX, "force LED effect during calls (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco, 5-10 see README); -1 follows call length")
 	flag.Parse()
 
 	log.Printf("config %s: serial=%q http=%q processes=%v", cfgPath, *serialPort, *httpURL, detector.TeamsExes)
@@ -97,8 +97,8 @@ func main() {
 		if *webDuration < time.Second || *webDuration > time.Minute {
 			log.Fatalf("web duration %v: want 1s-60s (each ping holds up the queue this long)", *webDuration)
 		}
-		if *webFX < 0 || *webFX >= web.FXCount {
-			log.Fatalf("web fx %d: want 0-%d", *webFX, web.FXCount-1)
+		if *webFX < 0 || *webFX >= len(web.Effects) {
+			log.Fatalf("web fx %d: want 0-%d", *webFX, len(web.Effects)-1)
 		}
 		ping := func(fx int) {
 			for _, a := range acts {

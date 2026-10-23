@@ -103,10 +103,10 @@ Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -Fi
 | `--headless` | false | sin bandeja ni notificaciones |
 | `--interval 1s` | 1s | intervalo de consulta |
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
-| `--fx 3` | XML o -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
+| `--fx 3` | XML o -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco, 5–10 [extras](firmware/esp8266/README.md#efectos-extra-solo-con-fx-n)); -1 sigue la duración de la llamada |
 | `--web 127.0.0.1:8080` | XML o desactivado | página de ping para teammates |
 | `--web-duration 5s` | XML o 5s | cuánto dura un ping (1s–60s) |
-| `--web-fx 4` | XML o 4 | animación por defecto del ping (0–4, como `--fx`) |
+| `--web-fx 4` | XML o 4 | animación por defecto del ping (0–10, como `--fx`) |
 | `--web-pickfx=false` | XML o true | si es false, se oculta el menú de animaciones y siempre se usa la de por defecto |
 | `--web-name Germán` | XML o vacío | de quién es el aro; aparece en la página. Se lee al arrancar: para cambiarlo hay que relanzar la app |
 | `--web-cooldown 30s` | XML o 30s | tiempo mínimo entre pings de un mismo cliente |
@@ -187,7 +187,7 @@ Más trucos del hardware (pinout, anillo que no enciende, puerto ocupado) en [fi
 
 ## Control web para teammates (Tailscale Funnel)
 
-Una página con un solo botón para que tus compañeros hagan parpadear el anillo desde el navegador. Cada pulsación pone en cola una animación (`FX <n>`) durante `duration` segundos (5 por defecto). Después, el anillo vuelve al estado real: en llamada o apagado. Desde un menú desplegable, cada visitante elige la animación (encendido suave, reloj, vúmetro, coche fantástico o discoteca) o deja "Por defecto". La página reproduce la misma animación que el aro físico.
+Una página con un solo botón para que tus compañeros hagan parpadear el anillo desde el navegador. Cada pulsación pone en cola una animación (`FX <n>`) durante `duration` segundos (5 por defecto). Después, el anillo vuelve al estado real: en llamada o apagado. Desde un menú desplegable, cada visitante elige la animación (encendido suave, reloj, vúmetro, coche fantástico, discoteca, sirena, latido, Pac-Man, ruleta del café, fuego o cometa) o deja "Por defecto". Los seis últimos necesitan el firmware actualizado: flashea el ESP8266 (`deploy\flash.ps1`) antes de actualizar la app. La página reproduce la misma animación que el aro físico.
 
 ```
 navegador ──HTTPS──► Tailscale Funnel ──túnel saliente──► tailscaled (PC) ──► 127.0.0.1:8080 (teams_monitor) ──► ESP8266

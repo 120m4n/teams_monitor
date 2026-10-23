@@ -21,10 +21,13 @@ import (
 //go:embed index.html
 var page []byte // {{NAME}} is replaced by Options.Name
 
-const (
-	MaxQueue = 10
-	FXCount  = 5 // firmware effects: 0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco
-)
+const MaxQueue = 10
+
+// Effects are the firmware's effect names, indexed by FX number (FX_NAMES in
+// firmware/esp8266/src/main.cpp; TestEffectsMatchFirmware keeps them in sync). The page maps
+// each name to its own copy of the animation.
+var Effects = []string{"fade-in", "clock", "voice", "scanner", "disco",
+	"siren", "heartbeat", "pacman", "roulette", "fire", "comet"}
 
 type Options struct {
 	Cooldown time.Duration // between pings from one client
@@ -66,10 +69,11 @@ func New(ping func(fx int), o Options) http.Handler {
 	mux.HandleFunc("GET /config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(struct {
-			Duration int  `json:"duration"` // seconds
-			FX       int  `json:"fx"`
-			PickFX   bool `json:"pickfx"`
-		}{secs(s.Duration), s.FX, s.PickFX})
+			Duration int      `json:"duration"` // seconds
+			FX       int      `json:"fx"`
+			PickFX   bool     `json:"pickfx"`
+			Effects  []string `json:"effects"`
+		}{secs(s.Duration), s.FX, s.PickFX, Effects})
 	})
 	return mux
 }
@@ -102,7 +106,7 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 	fx := s.FX
 	if v := r.FormValue("fx"); v != "" && s.PickFX { // ignored when picking is off
 		n, err := strconv.Atoi(v)
-		if err != nil || n < 0 || n >= FXCount {
+		if err != nil || n < 0 || n >= len(Effects) {
 			send(w, http.StatusBadRequest, reply{Error: "Animación desconocida"})
 			return
 		}

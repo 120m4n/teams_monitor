@@ -232,17 +232,27 @@ for (let i = 0, row = 0, col = 0; i < 12; i++) {
   leds.push(d);
 }
 
-// Firmware effects (FX <n>), with what the page says while one plays.
-const EFFECTS = [
-  ['Encendido suave', 'encendiéndose despacito'],
-  ['Reloj', 'marcando los segundos'],
-  ['Vúmetro', 'hablando más que tú en las dailies'],
-  ['Coche fantástico', 'en modo coche fantástico'],
-  ['Discoteca', 'de fiesta'],
-];
-const CFG = { fx: 4, pickfx: false };
+// Firmware effects by name: menu label and what the page says while one plays. The server sends
+// the names in FX order (GET config), so FX numbers live only in the firmware and pkg/web.
+const EFFECTS = {
+  'fade-in': ['Encendido suave', 'encendiéndose despacito'],
+  clock: ['Reloj', 'marcando los segundos'],
+  voice: ['Vúmetro', 'hablando más que tú en las dailies'],
+  scanner: ['Coche fantástico', 'en modo coche fantástico'],
+  disco: ['Discoteca', 'de fiesta'],
+  siren: ['Sirena', 'pidiendo que contestes el Slack'],
+  heartbeat: ['Latido', 'latiendo: sigue vivo tras la reunión'],
+  pacman: ['Pac-Man', 'comiéndose los puntos del sprint'],
+  roulette: ['Ruleta del café', 'girando la ruleta del café; quién paga solo se ve en su escritorio'],
+  fire: ['Fuego', 'que arde'],
+  comet: ['Cometa', 'lanzando un cometa'],
+};
+const CFG = { fx: 4, pickfx: false, effects: [] };
+const fxName = n => CFG.effects[n] || 'disco';
+const fxInfo = name => EFFECTS[name] || [name, 'de fiesta']; // a firmware effect this page doesn't know yet
 
-const RED = '#ff2b22', AMBER = '#ffb000', ORANGE = '#ff7a00', GRAY = '#9aa4b2', GREEN = '#22ff88';
+const RED = '#ff2b22', AMBER = '#ffb000', ORANGE = '#ff7a00', GRAY = '#9aa4b2', GREEN = '#22ff88',
+  BLUE = '#2b5bff', YELLOW = '#ffb400', ICE = '#55aaff';
 const wave = (t, period) => .5 - .5 * Math.cos(t / period * 2 * Math.PI);
 // Fraction of LED i still lit in a countdown: the ring empties counterclockwise from LED 11.
 const lit = (i, now) => {
@@ -254,7 +264,7 @@ const LOOKS = {
   idle: (i, t) => [RED, calm() ? .45 : .15 + .45 * wave(t, 3600)],
   sending: (i, t) => [RED, Math.max(.05, 1 - ((Math.floor(t / (calm() ? 160 : 70)) - i + 1200) % 12) * .3)],
   queued: (i, t) => [RED, i === Math.floor(t / 500) % 12 ? .85 : .12],
-  play: (i, t) => FX_LOOKS[S.fx](i, t),
+  play: (i, t) => (FX_LOOKS[fxName(S.fx)] || FX_LOOKS.disco)(i, t),
   cooldown: (i, t, now) => [RED, lit(i, now) * .8],
   soon: (i, t, now) => [AMBER, lit(i, now) * (calm() || t > 1600 || Math.floor(t / 160) % 2 ? .95 : .08)],
   full: () => [ORANGE, .7],
@@ -262,23 +272,51 @@ const LOOKS = {
   egg: (i, t) => [GREEN, calm() ? .8 : (Math.floor(t / 70) + i) % 3 === 0 ? 1 : .12],
 };
 
-// Page versions of the firmware effects (firmware/esp8266/src/main.cpp), same order as EFFECTS.
+// Page versions of the firmware effects (firmware/esp8266/src/main.cpp), by name.
 const noise = n => { const x = Math.sin(n * 12.9898) * 43758.5453; return x - Math.floor(x); };
-const FX_LOOKS = [
-  (i, t) => [RED, Math.min(1, t / 2000)],                                     // fade-in
-  (i, t) => [RED, i === Math.floor(t / 1000) % 12 ? 1 : .06],                 // clock: second hand
-  (i, t) => {                                                                 // voice: VU meter up both sides
+const FX_LOOKS = {
+  'fade-in': (i, t) => [RED, Math.min(1, t / 2000)],
+  clock: (i, t) => [RED, i === Math.floor(t / 1000) % 12 ? 1 : .06],          // second hand
+  voice: (i, t) => {                                                           // VU meter up both sides
     const level = (n => n < .3 ? 0 : 2 + n * 4)(noise(calm() ? 1 : Math.floor(t / 120)));
     const k = i < 6 ? i : 11 - i;
     return [`hsl(${k * 8} 100% 50%)`, Math.max(.04, Math.min(1, level - k))];
   },
-  (i, t) => {                                                                 // scanner: eye sweeping back and forth
+  scanner: (i, t) => {                                                         // eye sweeping back and forth
     const step = Math.floor(t / (calm() ? 200 : 80)) % 22, pos = step < 12 ? step : 22 - step;
     return [RED, Math.max(.04, 1 - Math.abs(i - pos) * .4)];
   },
-  (i, t) => [`hsl(${(i * 30 + (calm() ? 0 : t * .45)) % 360} 100% 55%)`,     // disco: spinning rainbow
+  disco: (i, t) => [`hsl(${(i * 30 + (calm() ? 0 : t * .45)) % 360} 100% 55%)`, // spinning rainbow
     calm() ? .85 : .55 + .45 * wave(t + i * 120, 420)],
-];
+  siren: (i, t) => {                                                           // red and blue halves swapping
+    const flip = Math.floor(t / 400) % 2 === 1, on = calm() || Math.floor(t % 400 / 67) % 2 === 0;
+    return [(i < 6) === flip ? RED : BLUE, on ? 1 : .05];
+  },
+  heartbeat: (i, t) => {                                                       // pum-pum, once a second
+    const p = t % 1000;
+    const v = p < 120 ? 1 - p / 120 : p >= 200 && p < 320 ? .7 * (1 - (p - 200) / 120) : 0;
+    return [RED, calm() ? .5 : .08 + .92 * v];
+  },
+  pacman: (i, t) => {                                                          // eats a dot per LED, dots return each lap
+    const pos = Math.floor(t / 150) % 12, body = (pos + 11) % 12, open = Math.floor(t / 75) % 2;
+    return i === pos ? [YELLOW, open ? 1 : .45] : i === body ? [YELLOW, 1] : i > pos ? ['#ffffff', .35] : [YELLOW, 0];
+  },
+  roulette: (i, t) => {                                                        // spins and slows down for 3 s
+    if (t >= 3000) return [YELLOW, calm() ? .5 : .15 + .5 * wave(t, 500)];     // the winner only shows on the real ring
+    const pos = Math.floor(36 * (1 - (1 - t / 3000) ** 2)) % 12;
+    return [RED, i === pos ? 1 : 0];
+  },
+  fire: (i, t) => {                                                            // flickering heat per LED
+    const k = Math.floor(t / 70), f = t / 70 - k;
+    const heat = calm() ? .7 : .25 + .75 * (noise(i * 97 + k) * (1 - f) + noise(i * 97 + k + 1) * f);
+    return [`rgb(255 ${Math.round(heat * heat * 85)} 0)`, heat];
+  },
+  comet: (i, t) => {                                                           // speeds up to 3.5 laps/s
+    const s = t / 1000, laps = s < 6 ? s * (.5 + s / 4) : 12 + (s - 6) * 3.5;
+    const head = laps * 12 % 12, behind = (head - i + 12) % 12;
+    return [ICE, Math.max(.04, .6 ** behind)];
+  },
+};
 
 // ---- State machine: idle → sending → queued → play → cooldown → idle, plus soon / full / offline / egg ----
 const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, ahead: 0, taps: 0, fx: 4 };
@@ -304,7 +342,7 @@ const cooldown = () => S.until > performance.now()
 const offline = () => go('offline', `El PC de ${VICTIM} está dormido o apagado. Zzz…`);
 
 function play() {
-  go('play', `¡PING! El aro de ${VICTIM} está ${EFFECTS[S.fx][1]}.`, [PLAY_MS, cooldown]);
+  go('play', `¡PING! El aro de ${VICTIM} está ${fxInfo(fxName(S.fx))[1]}.`, [PLAY_MS, cooldown]);
   confetti();
   sfx('disco');
 }
@@ -469,8 +507,8 @@ mute.addEventListener('click', () => {
 // ---- Effect picker: duration, default effect and whether visitors may pick come from GET config ----
 const FX_KEY = 'fx';
 function fillPicker() {
-  fxSel.replaceChildren(new Option(`Por defecto (${EFFECTS[CFG.fx][0]})`, ''),
-    ...EFFECTS.map(([name], n) => new Option(name, String(n))));
+  fxSel.replaceChildren(new Option(`Por defecto (${fxInfo(fxName(CFG.fx))[0]})`, ''),
+    ...CFG.effects.map((name, n) => new Option(fxInfo(name)[0], String(n))));
   try { fxSel.value = localStorage.getItem(FX_KEY) ?? ''; } catch {}
   if (fxSel.selectedIndex < 0) fxSel.value = '';
   $('pick').hidden = !CFG.pickfx;
@@ -480,6 +518,7 @@ fetch('config', { cache: 'no-store' }).then(r => r.json()).then(c => {
   PLAY_MS = c.duration * 1000;
   CFG.fx = c.fx;
   CFG.pickfx = c.pickfx;
+  CFG.effects = c.effects || [];
   fillPicker();
 }).catch(() => {}); // the first ping reports the PC as off
 

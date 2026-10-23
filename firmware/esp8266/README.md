@@ -12,6 +12,21 @@ Anima un anillo de 12 LEDs WS2812B (WCMCU-2812B-12) durante la llamada (`CALL_ON
 | 30 min | 3 | **scanner**: el "auto fantástico", un ojo rojo que va y vuelve con estela |
 | 45 min | 4 | **disco**: arcoíris girando con destellos blancos |
 
+## Efectos extra (solo con `FX <n>`)
+
+No entran en el timeline de la llamada. Los usa la página de ping para compañeros (ver el README principal), y sirven para probar.
+
+| `FX` | Efecto |
+|---|---|
+| 5 | **siren**: mitades roja y azul que se alternan cada 400 ms, con 3 destellos en cada fase |
+| 6 | **heartbeat**: doble pulso rojo (pum-pum) una vez por segundo, sobre un brillo rojo tenue |
+| 7 | **pacman**: Pac-Man amarillo avanza en sentido horario comiéndose un punto blanco por LED; los puntos vuelven en cada vuelta |
+| 8 | **roulette**: gira, frena durante 3 s y se para en un LED al azar, que queda parpadeando en dorado |
+| 9 | **fire**: llamas; cada LED parpadea entre rojo y amarillo con un calor aleatorio suavizado |
+| 10 | **comet**: cometa azul con estela que acelera hasta 3,5 vueltas por segundo a los 6 s |
+
+`FX_NAMES` en `src/main.cpp` debe coincidir con `Effects` en `pkg/web/web.go`: un test de Go lo comprueba.
+
 - Los tiempos se ajustan en `TIMELINE`, en `src/main.cpp`. Los tiempos del fade están en `FADE_IN_MS` y `FADE_OUT_MS`. La duración de clock está en `CLOCK_MS`, que también marca cuándo empieza voice.
 - El efecto voice **no escucha audio**: es aleatorio y solo lo imita.
 - Si llega un `CALL_ON` repetido con la llamada ya en curso, el cronómetro sigue corriendo.
@@ -22,7 +37,7 @@ Anima un anillo de 12 LEDs WS2812B (WCMCU-2812B-12) durante la llamada (`CALL_ON
 |---|---|---|
 | `CALL_ON` | `OK CALL_ON` | empieza la llamada y sigue el timeline |
 | `CALL_OFF` | `OK CALL_OFF` | fade-out y apagado |
-| `FX <0-4>` | `OK FX 3 scanner` | fuerza un efecto (para pruebas) hasta el siguiente `CALL_ON` o `CALL_OFF` |
+| `FX <0-10>` | `OK FX 3 scanner` | fuerza un efecto (para pruebas) hasta el siguiente `CALL_ON` o `CALL_OFF` |
 | cualquier otro | `ERR <texto>` | se ignora (por HTTP devuelve 400) |
 
 ## Pinout

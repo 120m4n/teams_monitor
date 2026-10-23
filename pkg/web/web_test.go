@@ -3,6 +3,9 @@ package web
 import (
 	"encoding/json"
 	"io"
+	"os"
+	"regexp"
+	"slices"
 	"strings"
 	"net/http"
 	"net/http/httptest"
@@ -123,7 +126,8 @@ func TestPickFX(t *testing.T) {
 	}{
 		{"/ping?fx=2", http.StatusAccepted, 2},
 		{"/ping", http.StatusAccepted, 4}, // default
-		{"/ping?fx=9", http.StatusBadRequest, -1},
+		{"/ping?fx=10", http.StatusAccepted, 10}, // comet, the last effect
+		{"/ping?fx=11", http.StatusBadRequest, -1},
 		{"/ping?fx=x", http.StatusBadRequest, -1},
 	} {
 		if code := postURL(h, c.url, "203.0.113."+c.url[len(c.url)-1:]+":1", ""); code != c.code {
@@ -153,5 +157,29 @@ func TestPageName(t *testing.T) {
 	body, _ := io.ReadAll(w.Body)
 	if !strings.Contains(string(body), `data-name="Ana &#34;&lt;b&gt;&#34;"`) || strings.Contains(string(body), "{{NAME}}") {
 		t.Fatalf("name not filled in escaped: %.200s", body)
+	}
+}
+
+func TestEffectsMatchFirmware(t *testing.T) {
+	src, err := os.ReadFile("../../firmware/esp8266/src/main.cpp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`FX_NAMES\[FX_COUNT\] = \{([^}]*)\}`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("FX_NAMES not found in main.cpp")
+	}
+	var fw []string
+	for _, q := range regexp.MustCompile(`"([^"]*)"`).FindAllSubmatch(m[1], -1) {
+		fw = append(fw, string(q[1]))
+	}
+	if !slices.Equal(fw, Effects) {
+		t.Fatalf("firmware FX_NAMES %q != web.Effects %q", fw, Effects)
+	}
+	for _, name := range Effects { // the page needs a label (EFFECTS) and an animation (FX_LOOKS) for each
+		key := regexp.MustCompile(`(?m)^\s*'?` + regexp.QuoteMeta(name) + `'?: `)
+		if n := len(key.FindAllIndex(page, -1)); n < 2 {
+			t.Errorf("index.html has %d entries for effect %q, want EFFECTS and FX_LOOKS", n, name)
+		}
 	}
 }

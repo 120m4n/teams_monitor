@@ -27,7 +27,7 @@ Copy `teams_monitor.example.xml` to `teams_monitor.xml` next to the exe. It sets
 | `--web 127.0.0.1:8080` | off | teammate ping page (see section 5) |
 | `--web-cooldown 30s` | 30s | minimum time between pings from one client |
 | `--web-duration 5s` | 5s | how long one ping plays, 1s-60s |
-| `--web-fx 4` | 4 | default ping effect 0-4 |
+| `--web-fx 4` | 4 | default ping effect 0-10 (see firmware/esp8266/README.md) |
 | `--web-pickfx=false` | true | hide the effect menu; always use the default effect |
 | `--web-name Germán` | empty | whose ring it is, shown on the page; read at startup |
 

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es" data-name="{{NAME}}">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Aro LED</title>
 <style>
   :root {
@@ -29,7 +29,9 @@
 
   * { box-sizing: border-box; }
   body {
-    margin: 0; min-height: 100vh; padding: 24px 16px 32px;
+    margin: 0; min-height: 100vh;
+    /* keep the footer clear of Safari's bottom toolbar and the home indicator */
+    padding: 24px max(16px, env(safe-area-inset-right)) calc(32px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     background: var(--bench); color: var(--ink);
     font: 17px/1.45 ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", Nunito, system-ui, sans-serif;
     display: flex; flex-direction: column; align-items: center; text-align: center;
@@ -59,6 +61,8 @@
     box-shadow: 0 0 0 2px var(--pcb-edge), inset 0 0 0 2px var(--pcb-edge), 0 10px 24px rgba(0,0,0,.25);
     transition: filter .4s;
   }
+  /* LEDs stay above the collar and button, like on the real ring, but let clicks through */
+  #leds { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
   .led {
     position: absolute; left: 50%; top: 50%; width: var(--ls); height: var(--ls); margin: calc(var(--ls) / -2);
     border-radius: 18%; background: var(--led-body); box-shadow: inset 0 0 0 1px rgba(0,0,0,.2);
@@ -79,9 +83,11 @@
 
   .core { position: absolute; inset: 0; display: grid; place-items: center; }
   .core > * { grid-area: 1 / 1; }
-  .collar { width: calc(var(--size) * .62); height: auto; }
+  /* The svg box is square; Safari can paint its corners opaque over the PCB, so clip it to the collar. */
+  .collar { width: calc(var(--size) * .62); height: auto; clip-path: circle(50%); }
+  .collar .spin { transform-origin: 100px 100px; }
   .collar text { font: 700 14px Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; letter-spacing: .08em; fill: var(--collar-ink); }
-  [data-mode="play"] .collar { animation: spin 1.2s linear infinite; }
+  [data-mode="play"] .collar .spin { animation: spin 1.2s linear infinite; } /* rotate inside the svg, not the svg itself */
   [data-mode="offline"] .collar { filter: grayscale(1); }
 
   #go {
@@ -105,6 +111,7 @@
   .zzz { position: absolute; right: 18%; top: 14%; font: 700 1.6rem/1 ui-rounded, system-ui, sans-serif; color: var(--muted); }
   [data-mode="offline"] .zzz { opacity: 1; animation: float 2.4s ease-in-out infinite; }
   .burst {
+    position: relative; z-index: 3; /* above the LEDs */
     font: 400 calc(var(--size) * .26) / 1 Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif; color: #fff;
     -webkit-text-stroke: 3px var(--estop-lo); paint-order: stroke; text-shadow: 0 6px 0 var(--estop-lo);
   }
@@ -138,7 +145,7 @@
     background: hsl(var(--h) 95% 58%); animation: fall var(--d) ease-in forwards;
   }
 
-  @keyframes spin { to { rotate: 360deg; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes wobble { 0%, 84%, 100% { rotate: 0deg; } 88% { rotate: -7deg; } 92% { rotate: 6deg; } 96% { rotate: -3deg; } }
   @keyframes tremble { 0% { translate: -3px 0; } 50% { translate: 3px 1px; } 100% { translate: -2px -1px; } }
   @keyframes shake { 0%, 100% { translate: 0; } 20%, 60% { translate: -9px 0; } 40%, 80% { translate: 9px 0; } }
@@ -162,9 +169,11 @@
     <div id="leds" aria-hidden="true"></div>
     <div class="core">
       <svg class="collar" viewBox="0 0 200 200" aria-hidden="true">
-        <circle cx="100" cy="100" r="84" fill="none" stroke-width="26" style="stroke: var(--collar)"/>
-        <path id="arc" d="M100,16 a84,84 0 1,1 0,168 a84,84 0 1,1 0,-168" fill="none"/>
-        <text dominant-baseline="central"><textPath href="#arc" textLength="520">NO PULSAR ✱ NO PULSAR ✱ NO PULSAR ✱</textPath></text>
+        <g class="spin">
+          <circle cx="100" cy="100" r="84" fill="none" stroke-width="26" style="stroke: var(--collar)"/>
+          <path id="arc" d="M100,16 a84,84 0 1,1 0,168 a84,84 0 1,1 0,-168" fill="none"/>
+          <text dominant-baseline="central"><textPath href="#arc" textLength="520">NO PULSAR ✱ NO PULSAR ✱ NO PULSAR ✱</textPath></text>
+        </g>
       </svg>
       <button id="go" data-mode="idle" aria-label="Enviar un ping al aro"><span id="face" aria-hidden="true">PING</span></button>
       <span class="burst" aria-hidden="true">PING!</span>

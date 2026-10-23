@@ -181,6 +181,7 @@
 'use strict';
 const VICTIM = 'Germán';  // whose ring this is: change to your name
 const PLAY_MS = 5000;     // how long the real ring plays one ping (cmd/app/main.go)
+const POLL_MS = 700;      // GET status interval while queued
 
 const $ = id => document.getElementById(id);
 const ring = $('ring'), btn = $('go'), face = $('face'), msg = $('msg'), tag = $('tag'),
@@ -232,7 +233,7 @@ const LOOKS = {
 };
 
 // ---- State machine: idle → sending → queued → disco → cooldown → idle, plus soon / full / offline / egg ----
-const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, pos: 1, taps: 0 };
+const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, ahead: 0, taps: 0 };
 
 function go(mode, text, after) {
   S.mode = mode;
@@ -278,10 +279,9 @@ async function send() {
   S.until = performance.now() + S.total;
   if (r.status === 202) {
     countPing();
-    S.pos = j.position || 1; // 0 is omitted by the server: the worker already took it
-    if (S.pos <= 1) return go('queued', '¡Eres el siguiente!', [900, disco]);
-    const wait = (S.pos - 1) * PLAY_MS;
-    go('queued', `En cola, con ${S.pos - 1} por delante. Te toca en unos ${Math.round(wait / 1000)} s.`, [wait, disco]);
+    S.ahead = -1; // unknown until the first status
+    go('queued', 'En cola…');
+    poll();
   } else if (r.status === 429 && j.error === 'Cola llena') {
     go('full', `Hay atasco, vuelve en ${secs} s.`, [S.total, idle]);
   } else if (r.status === 429) {
@@ -290,6 +290,26 @@ async function send() {
   } else {
     offline();
   }
+}
+
+// While queued, ask the server where our ping is; the disco starts when the real ring plays it.
+async function poll() {
+  if (S.mode !== 'queued') return;
+  let st;
+  try {
+    st = await (await fetch('status', { cache: 'no-store' })).json();
+  } catch {
+    return offline();
+  }
+  if (S.mode !== 'queued') return;
+  if (st.playing) return disco();
+  if (!st.position) return cooldown(); // it played between two polls
+  if (st.ahead !== S.ahead) {
+    S.ahead = st.ahead;
+    msg.textContent = st.ahead === 0 ? '¡Eres el siguiente!'
+      : st.ahead === 1 ? 'En cola, con 1 ping por delante.' : `En cola, con ${st.ahead} pings por delante.`;
+  }
+  setTimeout(poll, POLL_MS);
 }
 
 function nope() {
@@ -320,13 +340,9 @@ retry.addEventListener('click', send);
 // ---- Render loop ----
 const FACE = {
   idle: () => 'PING', sending: () => '···', disco: () => '¡YA!', offline: () => 'Zzz', egg: () => '🏆',
-  queued: () => '#' + (aheadNow() + 1),
+  queued: () => S.ahead < 0 ? '···' : '#' + (S.ahead + 1),
   cooldown: secsLeft, soon: secsLeft, full: secsLeft,
 };
-// Estimated pings still ahead of ours: the server only reports the position at press time.
-const aheadNow = () => S.mode === 'queued' && S.pos > 1 && S.next
-  ? Math.max(0, Math.ceil((S.at + S.next[0] - performance.now()) / PLAY_MS)) : 0;
-
 let lastFace = '', lastQueue = -1;
 function frame(now) {
   requestAnimationFrame(frame); // first, so one bad frame can't freeze the page
@@ -338,7 +354,7 @@ function frame(now) {
   }
   const f = String(FACE[S.mode]());
   if (f !== lastFace) face.textContent = lastFace = f;
-  const ahead = S.mode === 'queued' ? aheadNow() : -1;
+  const ahead = S.mode === 'queued' ? Math.max(0, S.ahead) : -1;
   if (ahead !== lastQueue) {
     lastQueue = ahead;
     queue.innerHTML = '🧍'.repeat(Math.max(0, Math.min(ahead, 9))) + (ahead >= 0 ? '<span class="you">🙋</span>' : '');

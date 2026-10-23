@@ -191,7 +191,7 @@ navegador ──HTTPS──► Tailscale Funnel ──túnel saliente──► t
 
 - **Sin abrir puertos, sin IP fija y sin dominio**: el PC abre una conexión saliente hacia Tailscale, así que funciona con IP dinámica y con CGNAT.
 - **El ESP8266 no queda expuesto**: el servidor web vive dentro de la app y escucha solo en `127.0.0.1`. La app reenvía el comando por los actuadores que ya tiene, sea serial o HTTP.
-- **Límites**: un ping por cliente cada `cooldown` (30 s por defecto) y como mucho 10 pings en cola. A partir de ahí el servidor responde HTTP 429 y la página indica cuándo reintentar. El botón queda desactivado mientras dura el cooldown.
+- **Límites**: un ping por cliente cada `cooldown` (30 s por defecto) y como mucho 10 pings en cola. A partir de ahí el servidor responde HTTP 429 y la página indica cuándo reintentar. El botón queda desactivado mientras dura el cooldown. Mientras espera, la página consulta `GET /status` (`{position, ahead, playing}`) para mostrar la fila real y lanza la animación cuando el aro físico empieza a sonar.
 - **Solo funciona con el PC encendido y la app corriendo**. Si no, la página avisa de que el PC puede estar apagado.
 
 Puesta en marcha:

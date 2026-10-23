@@ -1,6 +1,7 @@
 // Package web serves a one-button page that lets teammates flash the LED ring. It listens on
 // loopback and is published with Tailscale Funnel (docs/INSTALL.md). Each client gets one ping
-// per cooldown, and at most MaxQueue pings wait their turn.
+// per cooldown, and at most MaxQueue pings wait their turn. GET /status tells a client where its
+// ping is in the queue.
 package web
 
 import (
@@ -21,28 +22,44 @@ const MaxQueue = 10
 
 type server struct {
 	cooldown time.Duration
-	queue    chan string
+	wake     chan struct{} // nudges the worker after an enqueue
 
-	mu   sync.Mutex
-	last map[string]time.Time // client -> time of its last accepted ping
+	mu      sync.Mutex
+	last    map[string]time.Time // client -> time of its last accepted ping
+	waiting []string             // clients whose pings wait, oldest first
+	playing string               // client whose ping is playing now, "" if none
 }
 
 // New returns the handler. ping plays the effect and blocks for its duration; pings run one at a time.
 func New(ping func(), cooldown time.Duration) http.Handler {
-	s := &server{cooldown: cooldown, queue: make(chan string, MaxQueue), last: map[string]time.Time{}}
-	go func() {
-		for who := range s.queue {
-			log.Printf("web: ping from %s", who)
-			ping()
-		}
-	}()
+	s := &server{cooldown: cooldown, wake: make(chan struct{}, 1), last: map[string]time.Time{}}
+	go s.work(ping)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(page)
 	})
 	mux.HandleFunc("POST /ping", s.ping)
+	mux.HandleFunc("GET /status", s.status)
 	return mux
+}
+
+func (s *server) work(ping func()) {
+	for range s.wake {
+		for {
+			s.mu.Lock()
+			if len(s.waiting) == 0 {
+				s.playing = ""
+				s.mu.Unlock()
+				break
+			}
+			s.playing, s.waiting = s.waiting[0], s.waiting[1:]
+			who := s.playing
+			s.mu.Unlock()
+			log.Printf("web: ping from %s", who)
+			ping()
+		}
+	}
 }
 
 type reply struct {
@@ -60,11 +77,14 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 		send(w, http.StatusTooManyRequests, reply{Error: "Demasiado pronto", Retry: secs(s.cooldown - now.Sub(t))})
 		return
 	}
-	select {
-	case s.queue <- who:
-	default:
+	if len(s.waiting) >= MaxQueue {
 		send(w, http.StatusTooManyRequests, reply{Error: "Cola llena", Retry: 10})
 		return
+	}
+	s.waiting = append(s.waiting, who)
+	select {
+	case s.wake <- struct{}{}:
+	default: // the worker is already awake and drains the whole queue
 	}
 	for k, t := range s.last { // forget expired clients so the map stays small
 		if now.Sub(t) >= s.cooldown {
@@ -72,7 +92,32 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.last[who] = now
-	send(w, http.StatusAccepted, reply{Position: len(s.queue), Retry: secs(s.cooldown)})
+	send(w, http.StatusAccepted, reply{Position: len(s.waiting), Retry: secs(s.cooldown)})
+}
+
+type status struct {
+	Position int  `json:"position"` // place of the caller's ping among the waiting ones, 1-based; 0 if not waiting
+	Ahead    int  `json:"ahead"`    // pings that play before it, the one playing now included
+	Playing  bool `json:"playing"`  // the caller's ping is playing now
+}
+
+func (s *server) status(w http.ResponseWriter, r *http.Request) {
+	who := clientIP(r)
+	s.mu.Lock()
+	st := status{Playing: s.playing == who && who != ""}
+	for i, c := range s.waiting {
+		if c == who {
+			st.Position, st.Ahead = i+1, i
+			if s.playing != "" {
+				st.Ahead++
+			}
+			break
+		}
+	}
+	s.mu.Unlock()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	json.NewEncoder(w).Encode(st)
 }
 
 func send(w http.ResponseWriter, code int, r reply) {

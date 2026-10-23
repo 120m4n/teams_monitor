@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,4 +55,54 @@ func TestPing(t *testing.T) {
 	if c := post(h, "127.0.0.1:9", "10.9.9.9"); c != http.StatusTooManyRequests {
 		t.Fatalf("full queue: %d", c)
 	}
+}
+
+func getStatus(t *testing.T, h http.Handler, remote string) status {
+	r := httptest.NewRequest("GET", "/status", nil)
+	r.RemoteAddr = remote
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	var st status
+	if err := json.NewDecoder(w.Body).Decode(&st); err != nil {
+		t.Fatal(err)
+	}
+	return st
+}
+
+func TestStatus(t *testing.T) {
+	release := make(chan struct{})
+	h := New(func() { <-release }, time.Hour)
+	a, b, c := "203.0.113.1:1", "203.0.113.2:1", "203.0.113.3:1"
+
+	post(h, a, "")
+	for deadline := time.Now().Add(time.Second); !getStatus(t, h, a).Playing; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("a's ping never started playing")
+		}
+	}
+	post(h, b, "")
+	post(h, c, "")
+	if st := getStatus(t, h, b); st != (status{Position: 1, Ahead: 1}) {
+		t.Errorf("b: %+v", st)
+	}
+	if st := getStatus(t, h, c); st != (status{Position: 2, Ahead: 2}) {
+		t.Errorf("c: %+v", st)
+	}
+	if st := getStatus(t, h, "198.51.100.1:1"); st != (status{}) {
+		t.Errorf("stranger: %+v", st)
+	}
+
+	release <- struct{}{} // a done, b plays
+	for deadline := time.Now().Add(time.Second); !getStatus(t, h, b).Playing; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("b's ping never started playing")
+		}
+	}
+	if st := getStatus(t, h, a); st != (status{}) {
+		t.Errorf("a after playing: %+v", st)
+	}
+	if st := getStatus(t, h, c); st != (status{Position: 1, Ahead: 1}) {
+		t.Errorf("c after a: %+v", st)
+	}
+	close(release)
 }

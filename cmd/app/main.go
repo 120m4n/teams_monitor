@@ -17,22 +17,39 @@ import (
 	"golang.org/x/sys/windows"
 
 	"teams_monitor/pkg/actuator"
+	"teams_monitor/pkg/config"
 	"teams_monitor/pkg/detector"
 	"teams_monitor/pkg/events"
 	"teams_monitor/pkg/ui"
 )
 
 func main() {
+	setupLog()
+
+	// teams_monitor.xml next to the exe sets the flag defaults; explicit flags still win.
+	exe, err := os.Executable()
+	if err != nil {
+		log.Fatal(err)
+	}
+	cfgPath := filepath.Join(filepath.Dir(exe), "teams_monitor.xml")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		log.Fatalf("config: %v", err)
+	}
+	if len(cfg.Processes) > 0 {
+		detector.TeamsExes = cfg.Processes
+	}
+
 	headless := flag.Bool("headless", false, "no tray icon or toasts; detection + actuator only")
-	serialPort := flag.String("serial", "", "ESP32 serial port, e.g. COM3")
-	baud := flag.Int("baud", 115200, "serial baud rate")
-	httpURL := flag.String("http", "", "ESP32 HTTP endpoint, e.g. http://192.168.1.50/led")
+	serialPort := flag.String("serial", cfg.SerialPort(), "ESP32 serial port, e.g. COM3")
+	baud := flag.Int("baud", cfg.Actuator.Serial.Baud, "serial baud rate")
+	httpURL := flag.String("http", cfg.HTTPURL(), "ESP32 HTTP endpoint, e.g. http://192.168.1.50/led")
 	interval := flag.Duration("interval", time.Second, "detector poll interval")
 	debounce := flag.Int("debounce", 2, "consecutive readings needed to change state")
-	fx := flag.Int("fx", -1, "force LED effect 0-4 during calls (fade-in, clock, voice, scanner, disco); -1 follows call length")
+	fx := flag.Int("fx", cfg.FX, "force LED effect 0-4 during calls (fade-in, clock, voice, scanner, disco); -1 follows call length")
 	flag.Parse()
 
-	setupLog()
+	log.Printf("config %s: serial=%q http=%q processes=%v", cfgPath, *serialPort, *httpURL, detector.TeamsExes)
 	if *fx >= 0 {
 		actuator.OnPayload = fmt.Sprintf("FX %d\n", *fx)
 	}

@@ -12,7 +12,9 @@ GOOS=windows GOARCH=amd64 go build -ldflags -H=windowsgui -o teams_monitor.exe .
 
 Copy `teams_monitor.exe` somewhere stable, e.g. `C:\Tools\teams_monitor.exe`.
 
-## 2. Flags
+## 2. Config file and flags
+
+Copy `teams_monitor.example.xml` to `teams_monitor.xml` next to the exe. It sets the watched processes, the LED ring mode (`serial`, `http` or `both`), the COM port and the WiFi/static IP. Its values become the flag defaults, so explicit flags still win. Without the file, only flags are used. With the file in place, auto-start needs no `-Arguments`.
 
 | Flag | Default | |
 |---|---|---|
@@ -78,7 +80,7 @@ Wiring for a 12-LED WS2812B ring (e.g. WCMCU-2812B-12). Go by the pad labels on 
 - A 300–500 Ω resistor in series on DIN and a 470–1000 µF capacitor across 5V/GND are recommended.
 - If colors glitch, the 3.3 V data signal is too weak for the 5 V ring: add a level shifter (e.g. 74AHCT125).
 
-Flash it:
+Flash it with `deploy\flash.ps1` (builds `secrets.h` from `teams_monitor.xml`, closes and reopens the app around the upload), or by hand:
 
 ```sh
 cd firmware/esp8266

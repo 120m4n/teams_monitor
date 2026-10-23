@@ -59,26 +59,30 @@ Causas más probables, en orden:
 - **Puerto ocupado.** Solo un programa puede abrir el COM a la vez: cierra `pio device monitor`, Arduino IDE u otras sesiones de PowerShell antes de lanzar `teams_monitor.exe`.
 - **El ESP8266 se reinicia al abrir el puerto** porque DTR y RTS están conectados al reset. Espera unos 2 s antes de mandar comandos. Las pruebas de abajo ya lo hacen.
 - **Placa D1 mini**: cambia `board = nodemcuv2` por `board = d1_mini` en `platformio.ini`.
-- **WiFi**: copia `src/secrets.example.h` a `src/secrets.h`, pon el SSID y la contraseña (solo redes de 2.4 GHz) y vuelve a flashear. Sin ese archivo el firmware solo acepta serial. Reserva la IP de la placa en el router para que no cambie.
+- **WiFi**: completa `<wifi>` en `teams_monitor.xml` (solo redes de 2.4 GHz) y ejecuta `deploy\flash.ps1`, que genera `src/secrets.h` y flashea. Sin ese archivo el firmware solo acepta serial. Con `ip` y `gateway` la placa usa IP fija; sin ellos, DHCP.
 - **PlatformIO sin instalar**: `uv tool install platformio`, o `pip install platformio`.
 
 ## Modo WiFi (alimentación externa, sin USB al PC)
 
 La app ya lo soporta: lanzada con `--http` y sin `--serial`, no toca el puerto COM. Lo que hace falta es que el firmware se compile con `src/secrets.h`. Sin ese archivo es solo serial.
 
-**1. Configurar WiFi y flashear** (una vez, con el USB conectado):
+**1. Configurar WiFi y flashear** (una vez, con el USB conectado). En `teams_monitor.xml`, junto al `.exe`:
 
-```powershell
-cd firmware\esp8266
-copy src\secrets.example.h src\secrets.h
-notepad src\secrets.h          # pon WIFI_SSID y WIFI_PASS (red de 2.4 GHz; el ESP8266 no ve 5 GHz)
-pio run -t upload --upload-port COM16
-pio device monitor -p COM16    # espera la línea "HTTP: POST http://192.168.x.x/led", anota la IP, Ctrl+C
+```xml
+<actuator mode="http"><serial port="COM16"/></actuator>   <!-- el puerto solo se usa para flashear -->
+<wifi ssid="MiRed" password="..." ip="192.168.1.50" gateway="192.168.1.1" subnet="255.255.255.0"/>
 ```
 
-`secrets.h` está en `.gitignore`, así que la contraseña no se sube al repo.
+- Red de 2.4 GHz: el ESP8266 no ve 5 GHz.
+- Elige una IP **fuera del rango DHCP** del router, para que nadie más la reciba.
 
-**2. Reservar la IP en el router** (DHCP reservation, por la MAC de la placa, que muestra el flasheo). Si no, la IP puede cambiar al reiniciar y la app dejaría de encontrar la placa.
+```powershell
+powershell -ExecutionPolicy Bypass -File deploy\flash.ps1   # -Config <ruta> si el XML no está en la raíz del repo
+```
+
+El script genera `src/secrets.h` (en `.gitignore`), cierra `teams_monitor.exe` si está abierto, flashea y lo vuelve a abrir. Al final muestra la URL `http://<ip>/led`.
+
+**2. IP fija.** La placa usa la IP del XML y la app arma la URL con esa misma IP, así que no hace falta reservarla en el router. Si quitas `ip` del XML, la placa vuelve a DHCP y tendrás que pasar `--http` con la IP que muestre `pio device monitor`.
 
 **3. Alimentar la placa por fuera:**
 - Desconecta el USB del PC y aliméntala con un cargador USB de 5 V en el mismo conector, o con 5 V en el pin VIN/VU.
@@ -94,7 +98,7 @@ Invoke-RestMethod -Method Post -Uri "http://$ip/led" -ContentType text/plain -Bo
 Invoke-RestMethod -Method Post -Uri "http://$ip/led" -ContentType text/plain -Body "CALL_OFF"  # -> OK
 ```
 
-**5. Lanzar la app solo con HTTP:**
+**5. Lanzar la app solo con HTTP.** Con `mode="http"` en el XML basta con `.\teams_monitor.exe`. A mano:
 
 ```powershell
 .\teams_monitor.exe --http http://192.168.x.x/led           # sigue el timeline de efectos

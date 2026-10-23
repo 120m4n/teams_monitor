@@ -1,0 +1,61 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"slices"
+	"testing"
+)
+
+func write(t *testing.T, s string) string {
+	p := filepath.Join(t.TempDir(), "teams_monitor.xml")
+	if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestLoadMissing(t *testing.T) {
+	c, err := Load(filepath.Join(t.TempDir(), "none.xml"))
+	if err != nil || c.FX != -1 || c.Actuator.Serial.Baud != 115200 || c.SerialPort() != "" || c.HTTPURL() != "" {
+		t.Fatalf("got %+v, %v", c, err)
+	}
+}
+
+func TestLoadBoth(t *testing.T) {
+	c, err := Load(write(t, `<teamsMonitor>
+  <processes><exe>ms-teams.exe</exe><exe>zoom.exe</exe></processes>
+  <actuator mode="both"><serial port="COM16"/></actuator>
+  <wifi ssid="net" password="pw" ip="192.168.1.50" gateway="192.168.1.1" subnet="255.255.255.0"/>
+  <fx>3</fx>
+</teamsMonitor>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(c.Processes, []string{"ms-teams.exe", "zoom.exe"}) {
+		t.Errorf("processes = %v", c.Processes)
+	}
+	if c.SerialPort() != "COM16" || c.Actuator.Serial.Baud != 115200 || c.HTTPURL() != "http://192.168.1.50/led" || c.FX != 3 {
+		t.Errorf("got %+v", c)
+	}
+}
+
+func TestLoadHTTPOnly(t *testing.T) {
+	c, err := Load(write(t, `<teamsMonitor><actuator mode="http"><serial port="COM16"/></actuator><wifi ip="10.0.0.9"/></teamsMonitor>`))
+	if err != nil || c.SerialPort() != "" || c.HTTPURL() != "http://10.0.0.9/led" {
+		t.Fatalf("got %+v, %v", c, err)
+	}
+}
+
+func TestLoadInvalid(t *testing.T) {
+	for _, s := range []string{
+		`<teamsMonitor><actuator mode="usb"/></teamsMonitor>`,
+		`<teamsMonitor><actuator mode="serial"/></teamsMonitor>`,
+		`<teamsMonitor><actuator mode="both"><serial port="COM1"/></actuator></teamsMonitor>`,
+		`<teamsMonitor>`,
+	} {
+		if _, err := Load(write(t, s)); err == nil {
+			t.Errorf("Load(%s): want error", s)
+		}
+	}
+}

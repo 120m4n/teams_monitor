@@ -68,14 +68,15 @@ PlatformIO con el core Arduino y Adafruit NeoPixel. Lee líneas por serial a 115
 ## Estructura
 
 ```
-cmd/app/            main: flags, log, mutex, cableado del pipeline
+cmd/app/            main: config, flags, log, mutex, cableado del pipeline
+pkg/config/         lectura de teams_monitor.xml (portable)
 cmd/fake_call/      simula una llamada de Teams para pruebas (compilar como ms-teams.exe)
 pkg/detector/       detección WASAPI (Windows) + lógica de nombres (portable)
 pkg/events/         polling, debounce, máquina de estados
 pkg/ui/             bandeja, notificaciones, inicio automático, iconos
 pkg/actuator/       actuadores serial y HTTP
 firmware/esp8266/   firmware del anillo LED
-deploy/             install-task.ps1 (tarea programada con watchdog)
+deploy/             install-task.ps1 (tarea programada con watchdog), flash.ps1 (secrets.h desde el XML + flasheo)
 docs/               especificación (README.md) e instalación (INSTALL.md)
 tasks/              especificaciones de cada componente
 ```
@@ -87,15 +88,21 @@ go build -ldflags -H=windowsgui -o teams_monitor.exe ./cmd/app   # en macOS/Linu
 .\teams_monitor.exe --serial COM16
 ```
 
+### Configuración: `teams_monitor.xml`
+
+Copia `teams_monitor.example.xml` como `teams_monitor.xml` **junto al `.exe`**. Ahí se configuran los procesos a vigilar (por defecto los de Teams), el modo del anillo (`serial`, `http` o `both`), el puerto COM y la WiFi con IP fija. La app lo lee al arrancar y sus valores pasan a ser los defaults de los flags: un flag explícito sigue ganando. Sin el archivo, todo funciona como antes, solo con flags. Está en `.gitignore` porque contiene la contraseña WiFi.
+
+Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -File deploy\flash.ps1`. El script genera `secrets.h` desde el XML, cierra la app (que tiene el COM abierto), flashea por el puerto del XML y vuelve a abrir la app.
+
 | Flag | Por defecto | |
 |---|---|---|
-| `--serial COM16` | desactivado | anillo por USB serial |
-| `--baud 115200` | 115200 | velocidad serial |
-| `--http http://<ip>/led` | desactivado | anillo por WiFi |
+| `--serial COM16` | XML o desactivado | anillo por USB serial |
+| `--baud 115200` | XML o 115200 | velocidad serial |
+| `--http http://<ip>/led` | XML o desactivado | anillo por WiFi |
 | `--headless` | false | sin bandeja ni notificaciones |
 | `--interval 1s` | 1s | intervalo de consulta |
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
-| `--fx 3` | -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
+| `--fx 3` | XML o -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -161,7 +168,7 @@ Invoke-RestMethod -Method Post -Uri "http://<ip>/led" -ContentType text/plain -B
 
 ### Usar el anillo por WiFi, sin cable USB al PC
 
-Flashea el firmware con `src/secrets.h` (tu WiFi), alimenta la placa con cualquier cargador de 5 V y lanza la app solo con `--http`:
+En `teams_monitor.xml` pon `mode="http"` y completa `<wifi>` (SSID, contraseña, IP fija y gateway). Flashea con `deploy\flash.ps1`, alimenta la placa con cualquier cargador de 5 V y lanza la app sin argumentos. A mano también vale:
 
 ```powershell
 .\teams_monitor.exe --http http://192.168.x.x/led   # opcional: --fx 3
@@ -188,6 +195,6 @@ Para validar solo el detector: `.\fake\ms-teams.exe -for 20s` en una ventana y `
 ## Tests
 
 ```powershell
-go test ./...                                     # lógica portable (events, actuator, detector/teams)
+go test ./...                                     # lógica portable (events, actuator, config, detector/teams)
 go test -v -run TestIsTeamsCallActive ./pkg/detector   # solo Windows: consulta real del micrófono
 ```

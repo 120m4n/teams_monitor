@@ -166,6 +166,13 @@ void setup() {
 
 #if __has_include("secrets.h")
   WiFi.mode(WIFI_STA);
+#ifdef WIFI_IP  // static IP, so the PC app's URL never changes; otherwise DHCP
+  IPAddress ip, gateway, subnet;
+  ip.fromString(WIFI_IP);
+  gateway.fromString(WIFI_GATEWAY);
+  subnet.fromString(WIFI_SUBNET);
+  WiFi.config(ip, gateway, subnet, gateway);  // the gateway doubles as DNS; the board never resolves names
+#endif
   WiFi.begin(WIFI_SSID, WIFI_PASS);  // non-blocking; the core reconnects on its own
   server.on("/led", HTTP_POST, [] {
     bool ok = handleCommand(server.arg("plain"));

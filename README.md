@@ -9,7 +9,7 @@ Es un solo binario en Go, sin servicio de Windows, sin drivers y sin plugins de 
 - **Detección de llamada**: considera que hay llamada cuando Teams tiene abierta una sesión de captura **activa** en el micrófono de comunicaciones por defecto. No lee audio, solo el estado de la sesión.
 - **Bandeja del sistema**: el icono cambia entre inactivo y en llamada. El menú muestra el estado, "Iniciar con Windows" y Salir.
 - **Notificaciones** (toast) al empezar y al terminar una llamada.
-- **Anillo LED**: se anima durante la llamada y el efecto cambia según su duración (respiración → vúmetro → "auto fantástico" → disco). Conecta por USB serial (`--serial COM16`) o por WiFi/HTTP (`--http http://<ip>/led`). Se pueden usar ambos a la vez.
+- **Anillo LED**: se anima durante la llamada y el efecto cambia según su duración (segundero → vúmetro → "auto fantástico" → disco). Conecta por USB serial (`--serial COM16`) o por WiFi/HTTP (`--http http://<ip>/led`). Se pueden usar ambos a la vez.
 - **Modo `--headless`**: sin bandeja ni notificaciones; solo detección y anillo.
 - **Inicio automático** con la clave `HKCU\...\Run` desde el menú, o con una tarea programada con watchdog (`deploy/install-task.ps1`).
 - **Una sola instancia** a la vez, mediante el mutex `Local\TeamsMonitor`.
@@ -95,7 +95,7 @@ go build -ldflags -H=windowsgui -o teams_monitor.exe ./cmd/app   # en macOS/Linu
 | `--headless` | false | sin bandeja ni notificaciones |
 | `--interval 1s` | 1s | intervalo de consulta |
 | `--debounce 2` | 2 | lecturas iguales para cambiar de estado |
-| `--fx 3` | -1 | fuerza un efecto LED en llamada (0 fade-in, 1 breathe, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
+| `--fx 3` | -1 | fuerza un efecto LED en llamada (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 sigue la duración de la llamada |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -135,7 +135,7 @@ Lista sin nombres: `[System.IO.Ports.SerialPort]::GetPortNames()` devuelve solo 
 
 ### Probar los efectos LED sin esperar los tiempos
 
-En una llamada, el firmware cambia de efecto con la duración (breathe a los 2 s, voice a los 15 min, scanner a los 30, disco a los 45). Para ver uno al instante hay tres caminos.
+En una llamada, el firmware cambia de efecto con la duración (clock a los 2 s, voice a los 15 min, scanner a los 30, disco a los 45). Para ver uno al instante hay tres caminos.
 
 **1. Desde la app, con `--fx`.** Al detectar la llamada manda `FX n` en lugar de `CALL_ON`; al colgar, `CALL_OFF` como siempre:
 

@@ -17,10 +17,11 @@ constexpr uint8_t BRIGHTNESS = 80;  // 0-255; full white on 12 LEDs draws ~720 m
 
 Adafruit_NeoPixel ring(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-enum Fx : uint8_t { FX_FADE_IN, FX_BREATHE, FX_VOICE, FX_SCANNER, FX_DISCO, FX_COUNT };
-const char *const FX_NAMES[FX_COUNT] = {"fade-in", "breathe", "voice", "scanner", "disco"};
+enum Fx : uint8_t { FX_FADE_IN, FX_CLOCK, FX_VOICE, FX_SCANNER, FX_DISCO, FX_COUNT };
+const char *const FX_NAMES[FX_COUNT] = {"fade-in", "clock", "voice", "scanner", "disco"};
 
 constexpr uint32_t MINUTE = 60000;
+constexpr uint32_t CLOCK_MS = 15 * MINUTE;  // the clock's minute marks fill the ring in this time
 constexpr uint32_t FADE_IN_MS = 2000;
 constexpr uint32_t FADE_OUT_MS = 800;
 constexpr uint32_t FRAME_MS = 20;  // ~50 fps
@@ -29,8 +30,8 @@ constexpr uint32_t FRAME_MS = 20;  // ~50 fps
 struct Step { uint32_t fromMs; Fx fx; };
 constexpr Step TIMELINE[] = {
     {0, FX_FADE_IN},
-    {FADE_IN_MS, FX_BREATHE},  // calm while the call is short
-    {15 * MINUTE, FX_VOICE},
+    {FADE_IN_MS, FX_CLOCK},  // calm while the call is short
+    {CLOCK_MS, FX_VOICE},
     {30 * MINUTE, FX_SCANNER},
     {45 * MINUTE, FX_DISCO},   // this call is way too long
 };
@@ -54,9 +55,11 @@ void fadeIn(uint32_t t) {
   fill(ring.Color(v, 0, 0));
 }
 
-void breathe(uint32_t t) {  // ~3 s period; starts at full so it follows fade-in smoothly
-  uint8_t v = 60 + ring.sine8(uint8_t(t / 12 + 64)) * 195 / 255;
-  fill(ring.Color(v, 0, 0));
+void clockFace(uint32_t t) {  // second hand ticking clockwise over dim minute marks, one per CLOCK_MS / LED_COUNT
+  uint8_t marks = min<uint32_t>(t / (CLOCK_MS / LED_COUNT), LED_COUNT);
+  uint8_t hand = t / 1000 % LED_COUNT;
+  for (uint8_t i = 0; i < LED_COUNT; i++)
+    px(i, ring.Color(i == hand ? 255 : i < marks ? 25 : 0, 0, 0));
 }
 
 void voice(uint32_t) {  // fake VU meter: speech-like bursts growing up both sides from LEDs 0/11
@@ -122,7 +125,7 @@ void render() {
   uint32_t t;
   switch (currentFx(now - onAt, &t)) {
     case FX_FADE_IN: fadeIn(t); break;
-    case FX_BREATHE: breathe(t); break;
+    case FX_CLOCK: clockFace(t); break;
     case FX_VOICE: voice(t); break;
     case FX_SCANNER: scanner(t); break;
     default: disco(t); break;

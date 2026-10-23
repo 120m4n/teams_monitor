@@ -7,12 +7,12 @@ Anima un anillo de 12 LEDs WS2812B (WCMCU-2812B-12) durante la llamada (`CALL_ON
 | Desde | `FX` | Efecto |
 |---|---|---|
 | 0 s | 0 | **fade-in**: el rojo sube de 0 al máximo en 2 s |
-| 2 s | 1 | **breathe**: rojo que "respira", con un ciclo de unos 3 s |
+| 2 s | 1 | **clock**: un segundero rojo avanza un LED por segundo; cada 75 s queda encendida en rojo tenue una marca más de minutos, así que al llegar a voice el anillo está casi completo. Encendiendo pocos LEDs se calienta menos |
 | 15 min | 2 | **voice**: vúmetro simulado; ráfagas tipo voz que suben por ambos lados desde los LEDs 0 y 11, de rojo a naranja |
 | 30 min | 3 | **scanner**: el "auto fantástico", un ojo rojo que va y vuelve con estela |
 | 45 min | 4 | **disco**: arcoíris girando con destellos blancos |
 
-- Los tiempos se ajustan en `TIMELINE`, en `src/main.cpp`. Los tiempos del fade están en `FADE_IN_MS` y `FADE_OUT_MS`.
+- Los tiempos se ajustan en `TIMELINE`, en `src/main.cpp`. Los tiempos del fade están en `FADE_IN_MS` y `FADE_OUT_MS`. La duración de clock está en `CLOCK_MS`, que también marca cuándo empieza voice.
 - El efecto voice **no escucha audio**: es aleatorio y solo lo imita.
 - Si llega un `CALL_ON` repetido con la llamada ya en curso, el cronómetro sigue corriendo.
 

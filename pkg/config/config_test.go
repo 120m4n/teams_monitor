@@ -60,3 +60,13 @@ func TestLoadInvalid(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadExample(t *testing.T) {
+	c, err := Load("../../teams_monitor.example.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.SerialPort() == "" || c.Web.Listen != "127.0.0.1:8080" || c.Web.Duration != 5 || c.Web.Name == "" {
+		t.Errorf("example file drifted from the code: %+v", c)
+	}
+}

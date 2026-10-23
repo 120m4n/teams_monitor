@@ -21,10 +21,19 @@
   <!-- Force an LED effect during calls (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco); -1 follows call length. -->
   <fx>-1</fx>
 
-  <!-- One-button page that lets teammates flash the ring, published with Tailscale Funnel (docs/INSTALL.md).
-       Keep listen on 127.0.0.1. cooldown: seconds between pings from one client. duration: seconds one ping
-       plays (1-60). fx: default effect (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco). pickfx: teammates may
-       pick the effect from a menu (true/false). name: whose ring it is, shown on the page (read at startup:
-       restart the app to change it). Omit the element to disable the page. -->
-  <web listen="127.0.0.1:8080" cooldown="30" duration="5" fx="4" pickfx="true" name="Germán"/>
+  <!-- Teammate ping page, published with Tailscale Funnel (docs/INSTALL.md). Omit the element to disable it.
+       Read at startup: restart the app after changing anything here. -->
+  <web
+    listen="127.0.0.1:8080"
+    cooldown="30"
+    duration="5"
+    fx="4"
+    pickfx="true"
+    name="your-name"/>
+  <!-- listen:   address the page is served on; keep it on 127.0.0.1 so only the tunnel reaches it
+       cooldown: seconds between pings from one client
+       duration: seconds one ping plays on the ring (1-60); the queue waits this long per ping
+       fx:       default ping effect (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco)
+       pickfx:   true shows an effect menu on the page; false always uses fx
+       name:     whose ring it is, shown on the page ("El aro de ...") -->
 </teamsMonitor>

@@ -26,10 +26,11 @@ func (g *Group) SetCallState(active bool) {
 	g.each(func(a Actuator) error { return a.SetCallState(active) })
 }
 
-func (g *Group) Send(msg string) {
+// Send returns nil if at least one actuator took msg, else the last error.
+func (g *Group) Send(msg string) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.each(func(a Actuator) error { return a.Send(msg) })
+	return g.each(func(a Actuator) error { return a.Send(msg) })
 }
 
 // Sync sends the state active() reports, reading it under the lock so it is never stale.
@@ -40,11 +41,15 @@ func (g *Group) Sync(active func() bool) {
 	g.each(func(a Actuator) error { return a.SetCallState(v) })
 }
 
-func (g *Group) each(do func(Actuator) error) {
+func (g *Group) each(do func(Actuator) error) error {
+	var last error
+	ok := len(g.acts) == 0
 	for i, a := range g.acts {
 		msg := ""
 		if err := do(a); err != nil {
-			msg = err.Error()
+			msg, last = err.Error(), err
+		} else {
+			ok = true
 		}
 		switch {
 		case msg == g.lastErr[i]:
@@ -55,4 +60,8 @@ func (g *Group) each(do func(Actuator) error) {
 		}
 		g.lastErr[i] = msg
 	}
+	if ok {
+		return nil
+	}
+	return last
 }

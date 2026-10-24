@@ -319,7 +319,7 @@ const FX_LOOKS = {
 };
 
 // ---- State machine: idle → sending → queued → play → cooldown → idle, plus soon / full / offline / egg ----
-const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, ahead: 0, taps: 0, fx: 4 };
+const S = { mode: 'idle', at: 0, next: null, until: 0, total: 1, ahead: 0, taps: 0, fx: 4, ringOff: false };
 
 function go(mode, text, after) {
   S.mode = mode;
@@ -368,6 +368,7 @@ async function send() {
   if (r.status === 202) {
     countPing();
     S.ahead = -1; // unknown until the first status
+    S.ringOff = false;
     go('queued', 'En cola…');
     poll();
   } else if (r.status === 400) {
@@ -393,10 +394,14 @@ async function poll() {
   }
   if (S.mode !== 'queued') return;
   if (st.playing) return play();
-  if (!st.position) return cooldown(); // it played between two polls
-  if (st.ahead !== S.ahead) {
+  if (!st.position) { // it played between two polls, or it waited too long for the ring to come back
+    return S.ringOff ? go('idle', `El aro de ${VICTIM} sigue desconectado y tu ping caducó. Prueba más tarde.`) : cooldown();
+  }
+  if (st.ahead !== S.ahead || st.ring_offline !== S.ringOff) {
     S.ahead = st.ahead;
-    msg.textContent = st.ahead === 0 ? '¡Eres el siguiente!'
+    S.ringOff = st.ring_offline;
+    msg.textContent = S.ringOff ? `El aro de ${VICTIM} está desconectado. Tu ping espera en la cola y sonará cuando vuelva.`
+      : st.ahead === 0 ? '¡Eres el siguiente!'
       : st.ahead === 1 ? 'En cola, con 1 ping por delante.' : `En cola, con ${st.ahead} pings por delante.`;
   }
   setTimeout(poll, POLL_MS);

@@ -1,7 +1,8 @@
 // Package web serves a one-button page that lets teammates flash the LED ring. It listens on
 // loopback and is published with Tailscale Funnel (docs/INSTALL.md). Each client gets one ping
 // per cooldown, and at most MaxQueue pings wait their turn. GET /status tells a client where its
-// ping is in the queue, and GET /config tells the page the duration and effects.
+// ping is in the queue, and GET /config tells the page the duration and effects. While the ring is
+// unreachable the queue holds: the head ping is retried until the ring takes it or it gets too old.
 package web
 
 import (
@@ -23,6 +24,10 @@ var page []byte // {{NAME}} is replaced by Options.Name
 
 const MaxQueue = 10
 
+// While the ring is unreachable, the head ping is retried every retryEvery, and pings older than
+// maxWait are dropped so one doesn't go off hours later. Vars so tests can shorten them.
+var retryEvery, maxWait = 5 * time.Second, 15 * time.Minute
+
 // Effects are the firmware's effect names, indexed by FX number (FX_NAMES in
 // firmware/esp8266/src/main.cpp; TestEffectsMatchFirmware keeps them in sync). The page maps
 // each name to its own copy of the animation.
@@ -40,6 +45,7 @@ type Options struct {
 type entry struct {
 	who string
 	fx  int
+	at  time.Time // accepted
 }
 
 type server struct {
@@ -51,14 +57,15 @@ type server struct {
 	last    map[string]time.Time // client -> time of its last accepted ping
 	waiting []entry              // pings waiting, oldest first
 	playing string               // client whose ping is playing now, "" if none
+	offline bool                 // the last attempt to start a ping failed
 }
 
-// New returns the handler. ping plays effect fx on the ring and blocks for o.Duration; pings run
-// one at a time.
-func New(ping func(fx int), o Options) http.Handler {
+// New returns the handler. start starts effect fx on the ring, or fails if the ring is
+// unreachable; stop runs o.Duration after a start that worked. Pings run one at a time.
+func New(start func(fx int) error, stop func(), o Options) http.Handler {
 	s := &server{Options: o, wake: make(chan struct{}, 1), last: map[string]time.Time{},
 		page: bytes.ReplaceAll(page, []byte("{{NAME}}"), []byte(html.EscapeString(o.Name)))}
-	go s.work(ping)
+	go s.work(start, stop)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -78,28 +85,60 @@ func New(ping func(fx int), o Options) http.Handler {
 	return mux
 }
 
-func (s *server) work(ping func(fx int)) {
+func (s *server) work(start func(fx int) error, stop func()) {
 	for range s.wake {
 		for {
 			s.mu.Lock()
+			s.playing = ""
+			s.expire(time.Now())
 			if len(s.waiting) == 0 {
-				s.playing = ""
 				s.mu.Unlock()
 				break
 			}
-			e := s.waiting[0]
+			e := s.waiting[0] // only this worker removes entries, so it stays at the head
+			s.mu.Unlock()
+			if err := start(e.fx); err != nil {
+				s.mu.Lock()
+				if !s.offline {
+					log.Printf("web: ring unreachable, holding %d ping(s)", len(s.waiting))
+				}
+				s.offline = true
+				s.mu.Unlock()
+				time.Sleep(retryEvery)
+				continue
+			}
+			s.mu.Lock()
+			s.offline = false
 			s.playing, s.waiting = e.who, s.waiting[1:]
 			s.mu.Unlock()
 			log.Printf("web: ping from %s, fx %d", e.who, e.fx)
-			ping(e.fx)
+			time.Sleep(s.Duration)
+			stop()
 		}
 	}
 }
 
+// expire drops pings that waited maxWait or more. Call with s.mu held.
+func (s *server) expire(now time.Time) {
+	n := 0
+	for _, e := range s.waiting {
+		if now.Sub(e.at) < maxWait {
+			s.waiting[n] = e
+			n++
+		}
+	}
+	if n < len(s.waiting) {
+		log.Printf("web: dropped %d ping(s) older than %v", len(s.waiting)-n, maxWait)
+		clear(s.waiting[n:])
+		s.waiting = s.waiting[:n]
+	}
+}
+
 type reply struct {
-	Position int    `json:"position,omitempty"` // pings waiting, this one included
-	Error    string `json:"error,omitempty"`
-	Retry    int    `json:"retry"` // seconds until this client may ping again
+	Position    int    `json:"position,omitempty"` // pings waiting, this one included
+	Error       string `json:"error,omitempty"`
+	Retry       int    `json:"retry"`                  // seconds until this client may ping again
+	RingOffline bool   `json:"ring_offline,omitempty"` // the ping waits until the ring is back
 }
 
 func (s *server) ping(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +163,7 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 		send(w, http.StatusTooManyRequests, reply{Error: "Cola llena", Retry: 10})
 		return
 	}
-	s.waiting = append(s.waiting, entry{who, fx})
+	s.waiting = append(s.waiting, entry{who, fx, now})
 	select {
 	case s.wake <- struct{}{}:
 	default: // the worker is already awake and drains the whole queue
@@ -135,19 +174,20 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.last[who] = now
-	send(w, http.StatusAccepted, reply{Position: len(s.waiting), Retry: secs(s.Cooldown)})
+	send(w, http.StatusAccepted, reply{Position: len(s.waiting), Retry: secs(s.Cooldown), RingOffline: s.offline})
 }
 
 type status struct {
-	Position int  `json:"position"` // place of the caller's ping among the waiting ones, 1-based; 0 if not waiting
-	Ahead    int  `json:"ahead"`    // pings that play before it, the one playing now included
-	Playing  bool `json:"playing"`  // the caller's ping is playing now
+	Position    int  `json:"position"`     // place of the caller's ping among the waiting ones, 1-based; 0 if not waiting
+	Ahead       int  `json:"ahead"`        // pings that play before it, the one playing now included
+	Playing     bool `json:"playing"`      // the caller's ping is playing now
+	RingOffline bool `json:"ring_offline"` // the ring is unreachable; waiting pings are held
 }
 
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	who := clientIP(r)
 	s.mu.Lock()
-	st := status{Playing: s.playing == who && who != ""}
+	st := status{Playing: s.playing == who && who != "", RingOffline: s.offline}
 	for i, e := range s.waiting {
 		if e.who == who {
 			st.Position, st.Ahead = i+1, i

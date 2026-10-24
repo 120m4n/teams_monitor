@@ -95,14 +95,28 @@ func TestGroupLogsErrorChangesOnly(t *testing.T) {
 	a.err = errors.New("timeout")
 	g.Sync(func() bool { return true }) // board gone: logged once...
 	g.Sync(func() bool { return true }) // ...not on every resync
+	if err := g.Send("FX 4\n"); err == nil {
+		t.Error("Send with the only actuator down: want an error")
+	}
 	a.err = nil
-	g.Send("FX 4\n") // back
+	if err := g.Send("FX 4\n"); err != nil { // back
+		t.Error(err)
+	}
 	g.SetCallState(false)
 
-	if want := []string{"CALL_ON\n", "CALL_ON\n", "CALL_ON\n", "FX 4\n", "CALL_OFF\n"}; !reflect.DeepEqual(a.sent, want) {
+	if want := []string{"CALL_ON\n", "CALL_ON\n", "CALL_ON\n", "FX 4\n", "FX 4\n", "CALL_OFF\n"}; !reflect.DeepEqual(a.sent, want) {
 		t.Errorf("sent %q, want %q", a.sent, want)
 	}
 	if want := []string{"actuator: timeout", "actuator: ok again"}; !reflect.DeepEqual(logs, want) {
 		t.Errorf("logs %q, want %q", logs, want)
+	}
+}
+
+func TestGroupSendOneUpIsEnough(t *testing.T) {
+	down, up := &fakeActuator{err: errors.New("timeout")}, &fakeActuator{}
+	g := NewGroup(down, up)
+	g.Logf = func(string, ...any) {}
+	if err := g.Send("FX 1\n"); err != nil {
+		t.Fatalf("serial up, http down: %v", err)
 	}
 }

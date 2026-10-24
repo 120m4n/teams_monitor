@@ -98,15 +98,20 @@ func main() {
 		if *webFX < 0 || *webFX >= len(web.Effects) {
 			log.Fatalf("web fx %d: want 0-%d", *webFX, len(web.Effects)-1)
 		}
-		ping := func(fx int) {
+		start := func(fx int) error {
 			pinging.Store(true)
-			defer pinging.Store(false)
-			ring.Send(fmt.Sprintf("FX %d\n", fx))
-			time.Sleep(*webDuration)
+			err := ring.Send(fmt.Sprintf("FX %d\n", fx))
+			if err != nil {
+				pinging.Store(false) // board unreachable: the web queue holds the ping and retries
+			}
+			return err
+		}
+		stop := func() {
 			ring.Sync(func() bool { return mgr.State() == events.StateInCall }) // back to the real state (restarts the call-length timeline)
+			pinging.Store(false)
 		}
 		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Name: strings.TrimSpace(*webName)}
-		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(ping, opts))) }()
+		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(start, stop, opts))) }()
 		log.Printf("web: ping page on http://%s", *webAddr)
 	}
 

@@ -2,18 +2,23 @@ package web
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"regexp"
 	"slices"
 	"strings"
-	"net/http"
-	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 )
 
-var opts = Options{Cooldown: time.Hour, Duration: 5 * time.Second, FX: 4, PickFX: true}
+var opts = Options{Cooldown: time.Hour, Duration: time.Millisecond, FX: 4, PickFX: true}
+
+func started(int) error { return nil }
+func stopped()          {}
 
 func post(h http.Handler, remote, xff string) int { return postURL(h, "/ping", remote, xff) }
 
@@ -31,7 +36,7 @@ func postURL(h http.Handler, url, remote, xff string) int {
 func TestPing(t *testing.T) {
 	block := make(chan struct{})
 	defer close(block)
-	h := New(func(int) { <-block }, opts) // the first ping never finishes, so the queue fills up
+	h := New(started, func() { <-block }, opts) // the first ping never finishes, so the queue fills up
 
 	if c := post(h, "203.0.113.1:5000", ""); c != http.StatusAccepted {
 		t.Fatalf("first ping: %d", c)
@@ -80,7 +85,7 @@ func getStatus(t *testing.T, h http.Handler, remote string) status {
 
 func TestStatus(t *testing.T) {
 	release := make(chan struct{})
-	h := New(func(int) { <-release }, opts)
+	h := New(started, func() { <-release }, opts)
 	a, b, c := "203.0.113.1:1", "203.0.113.2:1", "203.0.113.3:1"
 
 	post(h, a, "")
@@ -118,14 +123,14 @@ func TestStatus(t *testing.T) {
 
 func TestPickFX(t *testing.T) {
 	played := make(chan int, 4)
-	h := New(func(fx int) { played <- fx }, opts)
+	h := New(func(fx int) error { played <- fx; return nil }, stopped, opts)
 	for _, c := range []struct {
 		url  string
 		code int
 		fx   int
 	}{
 		{"/ping?fx=2", http.StatusAccepted, 2},
-		{"/ping", http.StatusAccepted, 4}, // default
+		{"/ping", http.StatusAccepted, 4},        // default
 		{"/ping?fx=10", http.StatusAccepted, 10}, // comet, the last effect
 		{"/ping?fx=11", http.StatusBadRequest, -1},
 		{"/ping?fx=x", http.StatusBadRequest, -1},
@@ -142,10 +147,68 @@ func TestPickFX(t *testing.T) {
 
 	off := opts
 	off.PickFX = false
-	h = New(func(fx int) { played <- fx }, off)
+	h = New(func(fx int) error { played <- fx; return nil }, stopped, off)
 	postURL(h, "/ping?fx=2", "203.0.113.50:1", "")
 	if fx := <-played; fx != 4 {
 		t.Errorf("pickfx off played fx %d, want the default 4", fx)
+	}
+}
+
+func TestRingOffline(t *testing.T) {
+	retryEvery = time.Millisecond
+	defer func() { retryEvery = 5 * time.Second }()
+	var mu sync.Mutex
+	up := false
+	played := make(chan int, 4)
+	h := New(func(fx int) error {
+		mu.Lock()
+		defer mu.Unlock()
+		if !up {
+			return errors.New("timeout")
+		}
+		played <- fx
+		return nil
+	}, stopped, opts)
+	a, b := "203.0.113.1:1", "203.0.113.2:1"
+
+	postURL(h, "/ping?fx=1", a, "")
+	for deadline := time.Now().Add(time.Second); !getStatus(t, h, a).RingOffline; time.Sleep(time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("status never reported the ring offline")
+		}
+	}
+	postURL(h, "/ping?fx=2", b, "")
+	if st := getStatus(t, h, a); st != (status{Position: 1, RingOffline: true}) {
+		t.Errorf("a while offline: %+v", st)
+	}
+	if st := getStatus(t, h, b); st != (status{Position: 2, Ahead: 1, RingOffline: true}) {
+		t.Errorf("b while offline: %+v", st)
+	}
+
+	mu.Lock()
+	up = true // the board is back: the held pings play in order
+	mu.Unlock()
+	for _, want := range []int{1, 2} {
+		select {
+		case fx := <-played:
+			if fx != want {
+				t.Errorf("played fx %d, want %d", fx, want)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("fx %d never played", want)
+		}
+	}
+	if st := getStatus(t, h, b); st.RingOffline {
+		t.Errorf("still offline after a ping played: %+v", st)
+	}
+}
+
+func TestExpire(t *testing.T) {
+	now := time.Now()
+	s := &server{waiting: []entry{{"old", 0, now.Add(-maxWait)}, {"new", 1, now.Add(-time.Minute)}}}
+	s.expire(now)
+	if len(s.waiting) != 1 || s.waiting[0].who != "new" {
+		t.Fatalf("waiting after expire: %+v", s.waiting)
 	}
 }
 
@@ -153,7 +216,7 @@ func TestPageName(t *testing.T) {
 	o := opts
 	o.Name = `Ana "<b>"`
 	w := httptest.NewRecorder()
-	New(func(int) {}, o).ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	New(started, stopped, o).ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
 	body, _ := io.ReadAll(w.Body)
 	if !strings.Contains(string(body), `data-name="Ana &#34;&lt;b&gt;&#34;"`) || strings.Contains(string(body), "{{NAME}}") {
 		t.Fatalf("name not filled in escaped: %.200s", body)

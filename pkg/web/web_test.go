@@ -22,7 +22,16 @@ func stopped()          {}
 
 func post(h http.Handler, remote, xff string) int { return postURL(h, "/ping", remote, xff) }
 
+// postURL pings with a valid nick added; postRaw sends url as is.
 func postURL(h http.Handler, url, remote, xff string) int {
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	return postRaw(h, url+sep+"nick=tester", remote, xff)
+}
+
+func postRaw(h http.Handler, url, remote, xff string) int {
 	r := httptest.NewRequest("POST", url, nil)
 	r.RemoteAddr = remote
 	if xff != "" {
@@ -38,6 +47,12 @@ func TestPing(t *testing.T) {
 	defer close(block)
 	h := New(started, func() { <-block }, opts) // the first ping never finishes, so the queue fills up
 
+	for _, url := range []string{"/ping", "/ping?nick=", "/ping?nick=a", "/ping?nick=ana%20b", "/ping?nick=a%C3%B1o",
+		"/ping?nick=ana!", "/ping?nick=abcdefghijklmnopq"} { // missing, short, space, ñ, symbol, 17 chars
+		if c := postRaw(h, url, "203.0.113.200:1", ""); c != http.StatusBadRequest {
+			t.Fatalf("%s: %d, want 400", url, c)
+		}
+	}
 	if c := post(h, "203.0.113.1:5000", ""); c != http.StatusAccepted {
 		t.Fatalf("first ping: %d", c)
 	}
@@ -71,7 +86,9 @@ func TestPing(t *testing.T) {
 	}
 }
 
-func getStatus(t *testing.T, h http.Handler, remote string) status {
+func getStatus(t *testing.T, h http.Handler, remote string) place { return getQueue(t, h, remote).place }
+
+func getQueue(t *testing.T, h http.Handler, remote string) status {
 	r := httptest.NewRequest("GET", "/status", nil)
 	r.RemoteAddr = remote
 	w := httptest.NewRecorder()
@@ -88,21 +105,24 @@ func TestStatus(t *testing.T) {
 	h := New(started, func() { <-release }, opts)
 	a, b, c := "203.0.113.1:1", "203.0.113.2:1", "203.0.113.3:1"
 
-	post(h, a, "")
+	postRaw(h, "/ping?nick=ana", a, "")
 	for deadline := time.Now().Add(time.Second); !getStatus(t, h, a).Playing; time.Sleep(time.Millisecond) {
 		if time.Now().After(deadline) {
 			t.Fatal("a's ping never started playing")
 		}
 	}
-	post(h, b, "")
-	post(h, c, "")
-	if st := getStatus(t, h, b); st != (status{Position: 1, Ahead: 1}) {
+	postRaw(h, "/ping?nick=bob", b, "")
+	postRaw(h, "/ping?nick=Carlos2024xyz", c, "")
+	if q := getQueue(t, h, b).Queue; !slices.Equal(q, []string{"ana", "bob", "Carlos2024xyz"}) {
+		t.Errorf("queue: %q", q)
+	}
+	if st := getStatus(t, h, b); st != (place{Position: 1, Ahead: 1}) {
 		t.Errorf("b: %+v", st)
 	}
-	if st := getStatus(t, h, c); st != (status{Position: 2, Ahead: 2}) {
+	if st := getStatus(t, h, c); st != (place{Position: 2, Ahead: 2}) {
 		t.Errorf("c: %+v", st)
 	}
-	if st := getStatus(t, h, "198.51.100.1:1"); st != (status{}) {
+	if st := getStatus(t, h, "198.51.100.1:1"); st != (place{}) {
 		t.Errorf("stranger: %+v", st)
 	}
 
@@ -112,11 +132,14 @@ func TestStatus(t *testing.T) {
 			t.Fatal("b's ping never started playing")
 		}
 	}
-	if st := getStatus(t, h, a); st != (status{}) {
+	if st := getStatus(t, h, a); st != (place{}) {
 		t.Errorf("a after playing: %+v", st)
 	}
-	if st := getStatus(t, h, c); st != (status{Position: 1, Ahead: 1}) {
+	if st := getStatus(t, h, c); st != (place{Position: 1, Ahead: 1}) {
 		t.Errorf("c after a: %+v", st)
+	}
+	if q := getQueue(t, h, c).Queue; !slices.Equal(q, []string{"bob", "Carlos2024xyz"}) {
+		t.Errorf("queue after a: %q", q)
 	}
 	close(release)
 }
@@ -178,10 +201,10 @@ func TestRingOffline(t *testing.T) {
 		}
 	}
 	postURL(h, "/ping?fx=2", b, "")
-	if st := getStatus(t, h, a); st != (status{Position: 1, RingOffline: true}) {
+	if st := getStatus(t, h, a); st != (place{Position: 1, RingOffline: true}) {
 		t.Errorf("a while offline: %+v", st)
 	}
-	if st := getStatus(t, h, b); st != (status{Position: 2, Ahead: 1, RingOffline: true}) {
+	if st := getStatus(t, h, b); st != (place{Position: 2, Ahead: 1, RingOffline: true}) {
 		t.Errorf("b while offline: %+v", st)
 	}
 
@@ -205,7 +228,7 @@ func TestRingOffline(t *testing.T) {
 
 func TestExpire(t *testing.T) {
 	now := time.Now()
-	s := &server{waiting: []entry{{"old", 0, now.Add(-maxWait)}, {"new", 1, now.Add(-time.Minute)}}}
+	s := &server{waiting: []entry{{"old", "o", 0, now.Add(-maxWait)}, {"new", "n", 1, now.Add(-time.Minute)}}}
 	s.expire(now)
 	if len(s.waiting) != 1 || s.waiting[0].who != "new" {
 		t.Fatalf("waiting after expire: %+v", s.waiting)
@@ -215,11 +238,14 @@ func TestExpire(t *testing.T) {
 func TestPageName(t *testing.T) {
 	o := opts
 	o.Name = `Ana "<b>"`
-	w := httptest.NewRecorder()
-	New(started, stopped, o).ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
-	body, _ := io.ReadAll(w.Body)
-	if !strings.Contains(string(body), `data-name="Ana &#34;&lt;b&gt;&#34;"`) || strings.Contains(string(body), "{{NAME}}") {
-		t.Fatalf("name not filled in escaped: %.200s", body)
+	h := New(started, stopped, o)
+	for _, url := range []string{"/", "/welcome"} {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", url, nil))
+		body, _ := io.ReadAll(w.Body)
+		if !strings.Contains(string(body), `data-name="Ana &#34;&lt;b&gt;&#34;"`) || strings.Contains(string(body), "{{NAME}}") {
+			t.Fatalf("%s: name not filled in escaped: %.200s", url, body)
+		}
 	}
 }
 

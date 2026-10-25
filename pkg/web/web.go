@@ -13,6 +13,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,12 @@ import (
 
 //go:embed index.html
 var page []byte // {{NAME}} is replaced by Options.Name
+
+//go:embed welcome.html
+var welcome []byte // asks for the nickname the page needs; {{NAME}} as in page
+
+// Same rule as the pages: letters and digits only, so a nick is safe anywhere it's shown.
+var nickRe = regexp.MustCompile(`^[A-Za-z0-9]{2,16}$`)
 
 const MaxQueue = 10
 
@@ -43,34 +50,41 @@ type Options struct {
 }
 
 type entry struct {
-	who string
-	fx  int
+	who  string
+	nick string
+	fx   int
 	at  time.Time // accepted
 }
 
 type server struct {
 	Options
-	page []byte        // index.html with the name filled in
+	page    []byte        // index.html with the name filled in
+	welcome []byte        // welcome.html with the name filled in
 	wake chan struct{} // nudges the worker after an enqueue
 
 	mu      sync.Mutex
 	last    map[string]time.Time // client -> time of its last accepted ping
 	waiting []entry              // pings waiting, oldest first
-	playing string               // client whose ping is playing now, "" if none
+	playing entry                // ping playing now, zero if none
 	offline bool                 // the last attempt to start a ping failed
 }
 
 // New returns the handler. start starts effect fx on the ring, or fails if the ring is
 // unreachable; stop runs o.Duration after a start that worked. Pings run one at a time.
 func New(start func(fx int) error, stop func(), o Options) http.Handler {
+	name := []byte(html.EscapeString(o.Name))
 	s := &server{Options: o, wake: make(chan struct{}, 1), last: map[string]time.Time{},
-		page: bytes.ReplaceAll(page, []byte("{{NAME}}"), []byte(html.EscapeString(o.Name)))}
+		page: bytes.ReplaceAll(page, []byte("{{NAME}}"), name), welcome: bytes.ReplaceAll(welcome, []byte("{{NAME}}"), name)}
 	go s.work(start, stop)
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(s.page)
-	})
+	serve := func(b []byte) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Write(b)
+		}
+	}
+	mux.HandleFunc("GET /{$}", serve(s.page))
+	mux.HandleFunc("GET /welcome", serve(s.welcome))
 	mux.HandleFunc("POST /ping", s.ping)
 	mux.HandleFunc("GET /status", s.status)
 	mux.HandleFunc("GET /config", func(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +103,7 @@ func (s *server) work(start func(fx int) error, stop func()) {
 	for range s.wake {
 		for {
 			s.mu.Lock()
-			s.playing = ""
+			s.playing = entry{}
 			s.expire(time.Now())
 			if len(s.waiting) == 0 {
 				s.mu.Unlock()
@@ -109,9 +123,9 @@ func (s *server) work(start func(fx int) error, stop func()) {
 			}
 			s.mu.Lock()
 			s.offline = false
-			s.playing, s.waiting = e.who, s.waiting[1:]
+			s.playing, s.waiting = e, s.waiting[1:]
 			s.mu.Unlock()
-			log.Printf("web: ping from %s, fx %d", e.who, e.fx)
+			log.Printf("web: ping from %s (%s), fx %d", e.nick, e.who, e.fx)
 			time.Sleep(s.Duration)
 			stop()
 		}
@@ -142,6 +156,11 @@ type reply struct {
 }
 
 func (s *server) ping(w http.ResponseWriter, r *http.Request) {
+	nick := r.FormValue("nick")
+	if !nickRe.MatchString(nick) { // the page sends the visitor to the welcome page on this
+		send(w, http.StatusBadRequest, reply{Error: "Nick no válido"})
+		return
+	}
 	fx := s.FX
 	if v := r.FormValue("fx"); v != "" && s.PickFX { // ignored when picking is off
 		n, err := strconv.Atoi(v)
@@ -163,7 +182,7 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 		send(w, http.StatusTooManyRequests, reply{Error: "Cola llena", Retry: 10})
 		return
 	}
-	s.waiting = append(s.waiting, entry{who, fx, now})
+	s.waiting = append(s.waiting, entry{who, nick, fx, now})
 	select {
 	case s.wake <- struct{}{}:
 	default: // the worker is already awake and drains the whole queue
@@ -177,25 +196,30 @@ func (s *server) ping(w http.ResponseWriter, r *http.Request) {
 	send(w, http.StatusAccepted, reply{Position: len(s.waiting), Retry: secs(s.Cooldown), RingOffline: s.offline})
 }
 
-type status struct {
+type place struct {
 	Position    int  `json:"position"`     // place of the caller's ping among the waiting ones, 1-based; 0 if not waiting
 	Ahead       int  `json:"ahead"`        // pings that play before it, the one playing now included
 	Playing     bool `json:"playing"`      // the caller's ping is playing now
 	RingOffline bool `json:"ring_offline"` // the ring is unreachable; waiting pings are held
 }
 
+type status struct {
+	place
+	Queue []string `json:"queue"` // nicks, the one playing now first; the caller's is at index ahead
+}
+
 func (s *server) status(w http.ResponseWriter, r *http.Request) {
 	who := clientIP(r)
 	s.mu.Lock()
-	st := status{Playing: s.playing == who && who != "", RingOffline: s.offline}
+	st := status{place: place{Playing: s.playing.who == who && who != "", RingOffline: s.offline}, Queue: []string{}}
+	if s.playing.who != "" {
+		st.Queue = append(st.Queue, s.playing.nick)
+	}
 	for i, e := range s.waiting {
-		if e.who == who {
-			st.Position, st.Ahead = i+1, i
-			if s.playing != "" {
-				st.Ahead++
-			}
-			break
+		if e.who == who && st.Position == 0 {
+			st.Position, st.Ahead = i+1, len(st.Queue)
 		}
+		st.Queue = append(st.Queue, e.nick)
 	}
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")

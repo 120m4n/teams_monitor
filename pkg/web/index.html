@@ -3,6 +3,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Aro LED</title>
+<script>
+// No nick, no ping: send the visitor to the welcome page before anything shows (rule as in welcome.html and web.go).
+let NICK = '';
+try { NICK = localStorage.getItem('nick') || ''; } catch {}
+if (!/^[A-Za-z0-9]{2,16}$/.test(NICK)) location.replace('welcome');
+</script>
 <style>
   :root {
     --bench: #dde6ec; --ink: #13253d; --muted: #4b5e76;
@@ -126,8 +132,11 @@
   .pick select:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   #tag { min-height: 1.5em; margin: 4px 0 0; font-weight: 700; color: var(--muted); }
   #msg { min-height: 3em; margin: 4px 0 0; font-weight: 700; }
-  #queue { margin: 0; font-size: 1.8rem; letter-spacing: .15em; min-height: 0; }
-  #queue .you { display: inline-block; padding: 0 4px; border-radius: 8px; outline: 3px solid var(--collar); animation: hop .6s ease-in-out infinite alternate; }
+  #queue { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0 0; }
+  #queue[hidden] { display: none; }
+  #queue span { padding: 2px 10px; border: 2px solid var(--muted); border-radius: 999px; font-weight: 700; font-size: .9rem; }
+  #queue span:first-child { border-style: dashed; }
+  #queue .you { border-color: var(--collar); outline: 2px solid var(--collar); animation: hop .6s ease-in-out infinite alternate; }
 
   .btn {
     font: inherit; font-weight: 700; color: var(--ink); background: transparent; cursor: pointer;
@@ -138,6 +147,7 @@
   footer { margin-top: auto; padding-top: 28px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; color: var(--muted); font-size: .9rem; }
   footer .btn { color: var(--muted); padding: 4px 14px; min-height: 36px; }
   footer .btn[aria-pressed="true"] { color: var(--ink); }
+  footer a { color: inherit; }
 
   #confetti { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
   #confetti i {
@@ -192,6 +202,7 @@
 </main>
 
 <footer>
+  <span>Eres <b id="me"></b> · <a href="welcome">cambiar</a></span>
   <span id="count"></span>
   <button id="mute" class="btn" aria-pressed="false">🔇 Sonido</button>
 </footer>
@@ -210,6 +221,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const calm = () => reduced.matches;
 const pick = a => a[Math.floor(Math.random() * a.length)];
 document.querySelectorAll('.v').forEach(el => el.textContent = VICTIM);
+$('me').textContent = NICK;
 
 // ---- Copy ----
 const TAGS = [`Molesta a ${VICTIM}`, 'Sabes que quieres', 'Nadie está mirando', 'Es por el bien del equipo',
@@ -355,7 +367,7 @@ async function send() {
   let r, j;
   try {
     [r] = await Promise.all([
-      fetch(picked ? 'ping?fx=' + fxSel.value : 'ping', { method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }),
+      fetch('ping?nick=' + NICK + (picked ? '&fx=' + fxSel.value : ''), { method: 'POST', signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined }),
       new Promise(ok => setTimeout(ok, 600)), // let the scanner spin a little
     ]);
     j = await r.json();
@@ -371,6 +383,8 @@ async function send() {
     S.ringOff = false;
     go('queued', 'En cola…');
     poll();
+  } else if (r.status === 400 && j.error === 'Nick no válido') {
+    location.replace('welcome');
   } else if (r.status === 400) {
     go('idle', `${j.error}. Elige otra.`);
   } else if (r.status === 429 && j.error === 'Cola llena') {
@@ -397,6 +411,7 @@ async function poll() {
   if (!st.position) { // it played between two polls, or it waited too long for the ring to come back
     return S.ringOff ? go('idle', `El aro de ${VICTIM} sigue desconectado y tu ping caducó. Prueba más tarde.`) : cooldown();
   }
+  showQueue(st.queue || [], st.ahead);
   if (st.ahead !== S.ahead || st.ring_offline !== S.ringOff) {
     S.ahead = st.ahead;
     S.ringOff = st.ring_offline;
@@ -405,6 +420,21 @@ async function poll() {
       : st.ahead === 1 ? 'En cola, con 1 ping por delante.' : `En cola, con ${st.ahead} pings por delante.`;
   }
   setTimeout(poll, POLL_MS);
+}
+
+// Nicks in play order, the one playing now first (dashed); ours at index ahead. Long ones get an ellipsis.
+let lastQueue = '';
+function showQueue(names, you) {
+  const key = names.join() + '|' + you;
+  if (key === lastQueue) return;
+  lastQueue = key;
+  queue.replaceChildren(...names.map((n, k) => {
+    const el = document.createElement('span');
+    el.textContent = n.length > 8 ? n.slice(0, 8) + '…' : n;
+    el.title = n;
+    if (k === you) el.className = 'you';
+    return el;
+  }));
 }
 
 function nope() {
@@ -438,7 +468,7 @@ const FACE = {
   queued: () => S.ahead < 0 ? '···' : '#' + (S.ahead + 1),
   cooldown: secsLeft, soon: secsLeft, full: secsLeft,
 };
-let lastFace = '', lastQueue = -1;
+let lastFace = '';
 function frame(now) {
   requestAnimationFrame(frame); // first, so one bad frame can't freeze the page
   const t = now - S.at, look = LOOKS[S.mode];
@@ -449,11 +479,6 @@ function frame(now) {
   }
   const f = String(FACE[S.mode]());
   if (f !== lastFace) face.textContent = lastFace = f;
-  const ahead = S.mode === 'queued' ? Math.max(0, S.ahead) : -1;
-  if (ahead !== lastQueue) {
-    lastQueue = ahead;
-    queue.innerHTML = '🧍'.repeat(Math.max(0, Math.min(ahead, 9))) + (ahead >= 0 ? '<span class="you">🙋</span>' : '');
-  }
   if (S.next && t >= S.next[0]) { const fn = S.next[1]; S.next = null; fn(); }
 }
 

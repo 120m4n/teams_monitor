@@ -61,7 +61,7 @@ if (!/^[A-Za-z0-9]{2,16}$/.test(NICK)) location.replace('welcome');
     --R: calc(var(--size) * .40); --ls: calc(var(--size) * .085);
     position: relative; width: var(--size); height: var(--size); margin: 18px auto 10px;
   }
-  /* Above the collar: iOS Safari paints the collar svg's square box opaque while it spins, even clipped, and
+  /* Above the collar: iOS WebKit (Safari, Edge…) paints the collar svg's square box opaque while it spins, even clipped, and
      the PCB covers its corners (the collar fits in the PCB's hole). Clicks pass through to the button. */
   .pcb {
     position: absolute; inset: 3%; border-radius: 50%; z-index: 1; pointer-events: none;

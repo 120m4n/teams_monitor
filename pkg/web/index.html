@@ -61,12 +61,14 @@ if (!/^[A-Za-z0-9]{2,16}$/.test(NICK)) location.replace('welcome');
     --R: calc(var(--size) * .40); --ls: calc(var(--size) * .085);
     position: relative; width: var(--size); height: var(--size); margin: 18px auto 10px;
   }
-  /* Above the collar: iOS WebKit (Safari, Edge…) paints the collar svg's square box opaque while it spins, even clipped, and
-     the PCB covers its corners (the collar fits in the PCB's hole). Clicks pass through to the button. */
+  /* The annulus is a gradient, not a thick border: iOS WebKit (Safari, Edge…) skips painting a rounded border
+     when the repainted area (the spinning collar) is inside its inner box, leaving a dark square. */
   .pcb {
-    position: absolute; inset: 3%; border-radius: 50%; z-index: 1; pointer-events: none;
-    border: calc(var(--size) * .14) solid var(--pcb);
-    box-shadow: 0 0 0 2px var(--pcb-edge), inset 0 0 0 2px var(--pcb-edge), 0 10px 24px rgba(0,0,0,.25);
+    --hole: calc(var(--size) * .33);
+    position: absolute; inset: 3%; border-radius: 50%;
+    background: radial-gradient(circle closest-side, transparent calc(var(--hole) - 1px), var(--pcb-edge) var(--hole),
+      var(--pcb-edge) calc(var(--hole) + 2px), var(--pcb) calc(var(--hole) + 3px));
+    box-shadow: 0 0 0 2px var(--pcb-edge), 0 10px 24px rgba(0,0,0,.25);
     transition: filter .4s;
   }
   /* LEDs stay above the collar and button, like on the real ring, but let clicks through */
@@ -116,7 +118,7 @@ if (!/^[A-Za-z0-9]{2,16}$/.test(NICK)) location.replace('welcome');
   #go.shake { animation: shake .45s; }
 
   .zzz, .burst { pointer-events: none; opacity: 0; }
-  .zzz { position: absolute; z-index: 3; right: 18%; top: 14%; font: 700 1.6rem/1 ui-rounded, system-ui, sans-serif; color: var(--muted); }
+  .zzz { position: absolute; right: 18%; top: 14%; font: 700 1.6rem/1 ui-rounded, system-ui, sans-serif; color: var(--muted); }
   [data-mode="offline"] .zzz { opacity: 1; animation: float 2.4s ease-in-out infinite; }
   .burst {
     position: relative; z-index: 3; /* above the LEDs */

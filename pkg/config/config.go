@@ -33,6 +33,7 @@ type Config struct {
 		FX       int    `xml:"fx,attr"`       // default ping effect, an index into web.Effects
 		PickFX   bool   `xml:"pickfx,attr"`   // visitors may pick the effect
 		Name     string `xml:"name,attr"`     // whose ring it is, shown on the page
+		Timezone string `xml:"timezone,attr"` // IANA zone whose midnight ends a visitor's nick
 	} `xml:"web"`
 }
 
@@ -40,7 +41,7 @@ type Config struct {
 func Load(path string) (*Config, error) {
 	c := &Config{FX: -1}
 	c.Actuator.Serial.Baud = 115200
-	c.Web.Cooldown, c.Web.Duration, c.Web.FX, c.Web.PickFX = 30, 5, 4, true
+	c.Web.Cooldown, c.Web.Duration, c.Web.FX, c.Web.PickFX, c.Web.Timezone = 30, 5, 4, true, "America/Bogota"
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return c, nil

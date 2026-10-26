@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	_ "time/tzdata" // Windows has no zoneinfo for time.LoadLocation unless Go is installed
 
 	"golang.org/x/sys/windows"
 
@@ -57,6 +58,7 @@ func main() {
 	webFX := flag.Int("web-fx", cfg.Web.FX, "default ping effect, an index into web.Effects (0 fade-in ... 4 disco, 5 siren ... 10 comet)")
 	webName := flag.String("web-name", cfg.Web.Name, "whose ring it is, shown on the ping page")
 	webPickFX := flag.Bool("web-pickfx", cfg.Web.PickFX, "let teammates pick the ping effect on the page")
+	webTZ := flag.String("web-tz", cfg.Web.Timezone, "IANA time zone whose midnight expires teammates' nicks, e.g. America/Bogota")
 	fx := flag.Int("fx", cfg.FX, "force LED effect during calls (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco, 5-10 see README); -1 follows call length")
 	flag.Parse()
 
@@ -98,19 +100,27 @@ func main() {
 		if *webFX < 0 || *webFX >= len(web.Effects) {
 			log.Fatalf("web fx %d: want 0-%d", *webFX, len(web.Effects)-1)
 		}
-		start := func(fx int) error {
+		loc, err := time.LoadLocation(*webTZ)
+		if err != nil {
+			log.Fatalf("web tz: %v", err)
+		}
+		start := func(fx int, nick string) error {
 			pinging.Store(true)
 			err := ring.Send(fmt.Sprintf("FX %d\n", fx))
 			if err != nil {
 				pinging.Store(false) // board unreachable: the web queue holds the ping and retries
+				return err
 			}
-			return err
+			if !*headless {
+				go ui.Notify("Ping de "+nick, "Efecto: "+web.Effects[fx])
+			}
+			return nil
 		}
 		stop := func() {
 			ring.Sync(func() bool { return mgr.State() == events.StateInCall }) // back to the real state (restarts the call-length timeline)
 			pinging.Store(false)
 		}
-		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Name: strings.TrimSpace(*webName)}
+		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Name: strings.TrimSpace(*webName), Loc: loc}
 		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(start, stop, opts))) }()
 		log.Printf("web: ping page on http://%s", *webAddr)
 	}

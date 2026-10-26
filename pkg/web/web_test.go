@@ -17,8 +17,8 @@ import (
 
 var opts = Options{Cooldown: time.Hour, Duration: time.Millisecond, FX: 4, PickFX: true}
 
-func started(int) error { return nil }
-func stopped()          {}
+func started(int, string) error { return nil }
+func stopped()                  {}
 
 func post(h http.Handler, remote, xff string) int { return postURL(h, "/ping", remote, xff) }
 
@@ -86,7 +86,9 @@ func TestPing(t *testing.T) {
 	}
 }
 
-func getStatus(t *testing.T, h http.Handler, remote string) place { return getQueue(t, h, remote).place }
+func getStatus(t *testing.T, h http.Handler, remote string) place {
+	return getQueue(t, h, remote).place
+}
 
 func getQueue(t *testing.T, h http.Handler, remote string) status {
 	r := httptest.NewRequest("GET", "/status", nil)
@@ -146,7 +148,13 @@ func TestStatus(t *testing.T) {
 
 func TestPickFX(t *testing.T) {
 	played := make(chan int, 4)
-	h := New(func(fx int) error { played <- fx; return nil }, stopped, opts)
+	h := New(func(fx int, nick string) error {
+		if nick != "tester" {
+			t.Errorf("start got nick %q, want tester", nick)
+		}
+		played <- fx
+		return nil
+	}, stopped, opts)
 	for _, c := range []struct {
 		url  string
 		code int
@@ -170,7 +178,7 @@ func TestPickFX(t *testing.T) {
 
 	off := opts
 	off.PickFX = false
-	h = New(func(fx int) error { played <- fx; return nil }, stopped, off)
+	h = New(func(fx int, _ string) error { played <- fx; return nil }, stopped, off)
 	postURL(h, "/ping?fx=2", "203.0.113.50:1", "")
 	if fx := <-played; fx != 4 {
 		t.Errorf("pickfx off played fx %d, want the default 4", fx)
@@ -183,7 +191,7 @@ func TestRingOffline(t *testing.T) {
 	var mu sync.Mutex
 	up := false
 	played := make(chan int, 4)
-	h := New(func(fx int) error {
+	h := New(func(fx int, _ string) error {
 		mu.Lock()
 		defer mu.Unlock()
 		if !up {
@@ -270,5 +278,45 @@ func TestEffectsMatchFirmware(t *testing.T) {
 		if n := len(key.FindAllIndex(page, -1)); n < 2 {
 			t.Errorf("index.html has %d entries for effect %q, want EFFECTS and FX_LOOKS", n, name)
 		}
+	}
+}
+
+func TestDayEnd(t *testing.T) {
+	bogota, err := time.LoadLocation("America/Bogota")
+	if err != nil {
+		t.Fatal(err)
+	}
+	madrid, err := time.LoadLocation("Europe/Madrid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		now  time.Time
+		loc  *time.Location
+		want string
+	}{
+		{time.Date(2026, 10, 27, 4, 59, 0, 0, time.UTC), bogota, "2026-10-27T00:00:00-05:00"}, // 23:59 on the 26th in Bogota
+		{time.Date(2026, 10, 27, 5, 0, 0, 0, time.UTC), bogota, "2026-10-28T00:00:00-05:00"},  // midnight: a new day
+		{time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC), madrid, "2026-10-25T00:00:00+02:00"}, // DST ends on the 25th at 03:00
+		{time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC), madrid, "2026-10-26T00:00:00+01:00"},
+		{time.Date(2026, 10, 26, 23, 0, 0, 0, time.UTC), nil, "2026-10-27T00:00:00Z"},
+	} {
+		if got := dayEnd(c.now, c.loc).Format(time.RFC3339); got != c.want {
+			t.Errorf("dayEnd(%v, %v) = %s, want %s", c.now, c.loc, got, c.want)
+		}
+	}
+}
+
+func TestConfigNickUntil(t *testing.T) {
+	w := httptest.NewRecorder()
+	New(started, stopped, opts).ServeHTTP(w, httptest.NewRequest("GET", "/config", nil))
+	var c struct {
+		NickUntil int64 `json:"nick_until"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&c); err != nil {
+		t.Fatal(err)
+	}
+	if left := time.Until(time.UnixMilli(c.NickUntil)); left <= 0 || left > 24*time.Hour {
+		t.Fatalf("nick_until is %v away, want within the next day", left)
 	}
 }

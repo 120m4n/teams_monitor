@@ -93,7 +93,9 @@ document.querySelectorAll('.v').forEach(el => el.textContent = document.document
 
 const warn = text => { err.textContent = text; nick.setAttribute('aria-invalid', String(!!text)); };
 
+// A nick lasts until midnight in the ring owner's time zone; after that, offer yesterday's to confirm.
 try { nick.value = (localStorage.getItem('nick') || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 16); } catch {}
+if (nick.value) document.querySelector('.sub').textContent = 'Tu nick caducó a medianoche. Confírmalo para hoy o cámbialo.';
 
 // Typing or pasting a space or symbol: drop it on the spot and say why.
 nick.addEventListener('input', () => {
@@ -125,9 +127,18 @@ $('edit').addEventListener('click', () => {
   nick.focus();
 });
 
-$('yes').addEventListener('click', () => {
+$('yes').addEventListener('click', async () => {
+  let until;
+  try {
+    until = (await (await fetch('config', { cache: 'no-store' })).json()).nick_until;
+  } catch {}
+  if (!until) { // PC unreachable: the phone's own midnight
+    const d = new Date();
+    until = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime();
+  }
   try {
     localStorage.setItem('nick', nick.value);
+    localStorage.setItem('nick_until', String(until));
     if (localStorage.getItem('nick') !== nick.value) throw 0;
   } catch {
     ask.hidden = true;

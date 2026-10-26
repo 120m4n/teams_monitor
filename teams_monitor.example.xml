@@ -30,11 +30,13 @@
     duration="5"
     fx="4"
     pickfx="true"
-    name="your-name"/>
+    name="your-name"
+    timezone="America/Bogota"/>
   <!-- listen:   address the page is served on; keep it on 127.0.0.1 so only the tunnel reaches it
        cooldown: seconds between pings from one client
        duration: seconds one ping plays on the ring (1-60); the queue waits this long per ping
        fx:       default ping effect, same numbers as <fx> above (0-10)
        pickfx:   true shows an effect menu on the page; false always uses fx
-       name:     whose ring it is, shown on the page ("El aro de ...") -->
+       name:     whose ring it is, shown on the page ("El aro de ...")
+       timezone: IANA zone (e.g. America/Bogota, UTC-5); a visitor's nick expires at its midnight -->
 </teamsMonitor>

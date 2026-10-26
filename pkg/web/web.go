@@ -42,25 +42,26 @@ var Effects = []string{"fade-in", "clock", "voice", "scanner", "disco",
 	"siren", "heartbeat", "pacman", "roulette", "fire", "comet"}
 
 type Options struct {
-	Cooldown time.Duration // between pings from one client
-	Duration time.Duration // how long one ping plays; the page shows its animation this long
-	FX       int           // effect used when the visitor doesn't pick one
-	PickFX   bool          // let visitors pick the effect
-	Name     string        // whose ring it is, shown on the page; set once, at startup
+	Cooldown time.Duration  // between pings from one client
+	Duration time.Duration  // how long one ping plays; the page shows its animation this long
+	FX       int            // effect used when the visitor doesn't pick one
+	PickFX   bool           // let visitors pick the effect
+	Name     string         // whose ring it is, shown on the page; set once, at startup
+	Loc      *time.Location // a visitor's nick expires at midnight here; nil means UTC
 }
 
 type entry struct {
 	who  string
 	nick string
 	fx   int
-	at  time.Time // accepted
+	at   time.Time // accepted
 }
 
 type server struct {
 	Options
 	page    []byte        // index.html with the name filled in
 	welcome []byte        // welcome.html with the name filled in
-	wake chan struct{} // nudges the worker after an enqueue
+	wake    chan struct{} // nudges the worker after an enqueue
 
 	mu      sync.Mutex
 	last    map[string]time.Time // client -> time of its last accepted ping
@@ -71,7 +72,8 @@ type server struct {
 
 // New returns the handler. start starts effect fx on the ring, or fails if the ring is
 // unreachable; stop runs o.Duration after a start that worked. Pings run one at a time.
-func New(start func(fx int) error, stop func(), o Options) http.Handler {
+// New serves the page. start plays fx on the ring for the visitor called nick; stop ends it.
+func New(start func(fx int, nick string) error, stop func(), o Options) http.Handler {
 	name := []byte(html.EscapeString(o.Name))
 	s := &server{Options: o, wake: make(chan struct{}, 1), last: map[string]time.Time{},
 		page: bytes.ReplaceAll(page, []byte("{{NAME}}"), name), welcome: bytes.ReplaceAll(welcome, []byte("{{NAME}}"), name)}
@@ -94,12 +96,22 @@ func New(start func(fx int) error, stop func(), o Options) http.Handler {
 			FX       int      `json:"fx"`
 			PickFX   bool     `json:"pickfx"`
 			Effects  []string `json:"effects"`
-		}{secs(s.Duration), s.FX, s.PickFX, Effects})
+			NickTill int64    `json:"nick_until"` // ms since the epoch; welcome.html stores it with the nick
+		}{secs(s.Duration), s.FX, s.PickFX, Effects, dayEnd(time.Now(), s.Loc).UnixMilli()})
 	})
 	return mux
 }
 
-func (s *server) work(start func(fx int) error, stop func()) {
+// dayEnd is the next midnight after now in loc.
+func dayEnd(now time.Time, loc *time.Location) time.Time {
+	if loc == nil {
+		loc = time.UTC
+	}
+	y, m, d := now.In(loc).Date()
+	return time.Date(y, m, d+1, 0, 0, 0, 0, loc)
+}
+
+func (s *server) work(start func(fx int, nick string) error, stop func()) {
 	for range s.wake {
 		for {
 			s.mu.Lock()
@@ -111,7 +123,7 @@ func (s *server) work(start func(fx int) error, stop func()) {
 			}
 			e := s.waiting[0] // only this worker removes entries, so it stays at the head
 			s.mu.Unlock()
-			if err := start(e.fx); err != nil {
+			if err := start(e.fx, e.nick); err != nil {
 				s.mu.Lock()
 				if !s.offline {
 					log.Printf("web: ring unreachable, holding %d ping(s)", len(s.waiting))

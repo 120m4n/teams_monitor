@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"time"
 	_ "time/tzdata" // Windows has no zoneinfo for time.LoadLocation unless Go is installed
@@ -56,7 +55,6 @@ func main() {
 	webCooldown := flag.Duration("web-cooldown", time.Duration(cfg.Web.Cooldown)*time.Second, "minimum time between pings from one client")
 	webDuration := flag.Duration("web-duration", time.Duration(cfg.Web.Duration)*time.Second, "how long one ping plays, 1s-60s")
 	webFX := flag.Int("web-fx", cfg.Web.FX, "default ping effect, an index into web.Effects (0 fade-in ... 4 disco, 5 siren ... 10 comet)")
-	webName := flag.String("web-name", cfg.Web.Name, "whose ring it is, shown on the ping page")
 	webPickFX := flag.Bool("web-pickfx", cfg.Web.PickFX, "let teammates pick the ping effect on the page")
 	webTZ := flag.String("web-tz", cfg.Web.Timezone, "IANA time zone whose midnight expires teammates' nicks, e.g. America/Bogota")
 	fx := flag.Int("fx", cfg.FX, "force LED effect during calls (0 fade-in, 1 clock, 2 voice, 3 scanner, 4 disco, 5-10 see README); -1 follows call length")
@@ -120,7 +118,7 @@ func main() {
 			ring.Sync(func() bool { return mgr.State() == events.StateInCall }) // back to the real state (restarts the call-length timeline)
 			pinging.Store(false)
 		}
-		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Name: strings.TrimSpace(*webName), Loc: loc}
+		opts := web.Options{Cooldown: *webCooldown, Duration: *webDuration, FX: *webFX, PickFX: *webPickFX, Loc: loc}
 		go func() { log.Printf("web: %v", http.ListenAndServe(*webAddr, web.New(start, stop, opts))) }()
 		log.Printf("web: ping page on http://%s", *webAddr)
 	}

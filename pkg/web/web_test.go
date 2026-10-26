@@ -3,7 +3,6 @@ package web
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -240,20 +239,6 @@ func TestExpire(t *testing.T) {
 	s.expire(now)
 	if len(s.waiting) != 1 || s.waiting[0].who != "new" {
 		t.Fatalf("waiting after expire: %+v", s.waiting)
-	}
-}
-
-func TestPageName(t *testing.T) {
-	o := opts
-	o.Name = `Ana "<b>"`
-	h := New(started, stopped, o)
-	for _, url := range []string{"/", "/welcome"} {
-		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest("GET", url, nil))
-		body, _ := io.ReadAll(w.Body)
-		if !strings.Contains(string(body), `data-name="Ana &#34;&lt;b&gt;&#34;"`) || strings.Contains(string(body), "{{NAME}}") {
-			t.Fatalf("%s: name not filled in escaped: %.200s", url, body)
-		}
 	}
 }
 

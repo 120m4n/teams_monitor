@@ -110,7 +110,7 @@ Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -Fi
 | `--web-duration 5s` | XML o 5s | cuánto dura un ping (1s–60s) |
 | `--web-fx 4` | XML o 4 | animación por defecto del ping (0–10, como `--fx`) |
 | `--web-pickfx=false` | XML o true | si es false, se oculta el menú de animaciones y siempre se usa la de por defecto |
-| `--web-name Germán` | XML o vacío | de quién es el aro; aparece en la página. Se lee al arrancar: para cambiarlo hay que relanzar la app |
+| `--web-tz America/Bogota` | XML o America/Bogota | zona horaria IANA; los nicks de los compañeros caducan a su medianoche |
 | `--web-cooldown 30s` | XML o 30s | tiempo mínimo entre pings de un mismo cliente |
 
 Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
@@ -199,12 +199,12 @@ navegador ──HTTPS──► Tailscale Funnel ──túnel saliente──► t
 - **El ESP8266 no queda expuesto**: el servidor web vive dentro de la app y escucha solo en `127.0.0.1`. La app reenvía el comando por los actuadores que ya tiene, sea serial o HTTP.
 - **Límites**: un ping por cliente cada `cooldown` (30 s por defecto) y como mucho 10 pings en cola. A partir de ahí el servidor responde HTTP 429 y la página indica cuándo reintentar. El botón queda desactivado mientras dura el cooldown. Mientras espera, la página consulta `GET /status` (`{position, ahead, playing}`) para mostrar la fila real y lanza la animación cuando el aro físico empieza a sonar.
 - **Aro desconectado**: si la placa no responde (sin COM ni HTTP), los pings no se pierden. Quedan en cola y la app reintenta el primero cada 5 s hasta que la placa lo acepta, y luego suenan en orden. `GET /status` añade `ring_offline: true` y la página lo avisa. Un ping que lleva 15 min esperando caduca. La cola vive en memoria: si reinicias la app, se pierde.
-- **Configuración** (`<web>` en el XML o flags): `duration` (1–60 s; cada ping retiene la cola ese tiempo), `fx` (animación por defecto) `pickfx` (`false` oculta el menú y el servidor ignora el `?fx=` que llegue) y `name` (el nombre que aparece en la página, "El aro de …"; sin él dice "tu compañero"). `name` se inserta en la página al arrancar, así que para cambiarlo hay que relanzar la app. La página lo lee de `GET /config`.
+- **Configuración** (`<web>` en el XML o flags): `duration` (1–60 s; cada ping retiene la cola ese tiempo), `fx` (animación por defecto) `pickfx` (`false` oculta el menú y el servidor ignora el `?fx=` que llegue) y `timezone` (zona IANA, America/Bogota por defecto: el nick de cada compañero caduca a su medianoche). La página lee la configuración de `GET /config`.
 - **Solo funciona con el PC encendido y la app corriendo**. Si no, la página avisa de que el PC puede estar apagado.
 
 Puesta en marcha:
 
-1. En `teams_monitor.xml`: `<web listen="127.0.0.1:8080" cooldown="30" duration="5" fx="4" pickfx="true" name="Germán"/>`. Reinicia la app.
+1. En `teams_monitor.xml`: `<web listen="127.0.0.1:8080" cooldown="30" duration="5" fx="4" pickfx="true" timezone="America/Bogota"/>`. Reinicia la app.
 2. `winget install Tailscale.Tailscale` e inicia sesión.
 3. `tailscale funnel --bg 8080`. La primera vez da un enlace para activar HTTPS y Funnel en el tailnet.
 4. Comparte `https://<pc>.<tailnet>.ts.net/` (lo muestra `tailscale funnel status`). Los teammates no necesitan Tailscale.

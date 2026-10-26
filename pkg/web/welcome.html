@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="es" data-name="{{NAME}}">
+<html lang="es">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Aro LED · ¿Quién eres?</title>
+<title>The Teams-Ring · ¿Quién eres?</title>
 <style>
   :root {
     --bench: #dde6ec; --ink: #13253d; --muted: #4b5e76; --tape: #2350a8; --focus: #0b57d0;
@@ -61,7 +61,7 @@
 </style>
 
 <main>
-  <h1>El aro de <span class="v"></span></h1>
+  <h1>The Teams-Ring</h1>
   <p class="sub">Antes de pulsar, dinos quién eres: tu nick sale en la cola de pings.</p>
 
   <form id="form" novalidate>
@@ -89,7 +89,6 @@
 const NICK_RE = /^[A-Za-z0-9]{2,16}$/; // same rule as nickRe in web.go
 const $ = id => document.getElementById(id);
 const form = $('form'), nick = $('nick'), err = $('err'), ask = $('ask');
-document.querySelectorAll('.v').forEach(el => el.textContent = document.documentElement.dataset.name || 'tu compañero');
 
 const warn = text => { err.textContent = text; nick.setAttribute('aria-invalid', String(!!text)); };
 

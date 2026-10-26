@@ -30,7 +30,7 @@ Copy `teams_monitor.example.xml` to `teams_monitor.xml` next to the exe. It sets
 | `--web-duration 5s` | 5s | how long one ping plays, 1s-60s |
 | `--web-fx 4` | 4 | default ping effect 0-10 (see firmware/esp8266/README.md) |
 | `--web-pickfx=false` | true | hide the effect menu; always use the default effect |
-| `--web-name Germán` | empty | whose ring it is, shown on the page; read at startup |
+| `--web-tz America/Bogota` | America/Bogota | IANA time zone; teammates' nicks expire at its midnight |
 
 Try it by hand first: `teams_monitor.exe --serial COM3`, join a Teams call, and watch the tray icon turn red.
 

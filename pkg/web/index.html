@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="es" data-name="{{NAME}}">
+<html lang="es">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Aro LED</title>
+<title>The Teams-Ring</title>
 <script>
 // No nick, no ping: send the visitor to the welcome page before anything shows (rule as in welcome.html and web.go).
 // A nick expires at the midnight GET config gave welcome.html (nick_until).
@@ -176,8 +176,8 @@ if (!/^[A-Za-z0-9]{2,16}$/.test(NICK) || Date.now() >= NICK_UNTIL) location.repl
 </style>
 
 <main>
-  <h1>El aro de <span class="v"></span></h1>
-  <p class="sub">Este botón enciende de verdad el aro LED de su escritorio.</p>
+  <h1>The Teams-Ring</h1>
+  <p class="sub">Este botón enciende de verdad un anillo LED en el escritorio de un compañero.</p>
 
   <div class="ring" id="ring" data-mode="idle">
     <div class="pcb"></div>
@@ -190,7 +190,7 @@ if (!/^[A-Za-z0-9]{2,16}$/.test(NICK) || Date.now() >= NICK_UNTIL) location.repl
           <text dominant-baseline="central"><textPath href="#arc" textLength="520">NO PULSAR ✱ NO PULSAR ✱ NO PULSAR ✱</textPath></text>
         </g>
       </svg>
-      <button id="go" data-mode="idle" aria-label="Enviar un ping al aro"><span id="face" aria-hidden="true">PING</span></button>
+      <button id="go" data-mode="idle" aria-label="Enviar un ping al ring"><span id="face" aria-hidden="true">PING</span></button>
       <span class="burst" aria-hidden="true">PING!</span>
     </div>
     <span class="zzz" aria-hidden="true">Z z z</span>
@@ -215,7 +215,6 @@ if (!/^[A-Za-z0-9]{2,16}$/.test(NICK) || Date.now() >= NICK_UNTIL) location.repl
 
 <script>
 'use strict';
-const VICTIM = document.documentElement.dataset.name || 'tu compañero'; // <web name="..."> in teams_monitor.xml
 let PLAY_MS = 5000;       // how long the real ring plays one ping; GET config overrides it
 const POLL_MS = 700;      // GET status interval while queued
 
@@ -225,13 +224,12 @@ const fxSel = $('fx'), ring = $('ring'), btn = $('go'), face = $('face'), msg = 
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const calm = () => reduced.matches;
 const pick = a => a[Math.floor(Math.random() * a.length)];
-document.querySelectorAll('.v').forEach(el => el.textContent = VICTIM);
 $('me').textContent = NICK;
 
 // ---- Copy ----
-const TAGS = [`Molesta a ${VICTIM}`, 'Sabes que quieres', 'Nadie está mirando', 'Es por el bien del equipo',
-  'Un ping al día, alegría', 'Totalmente productivo', `${VICTIM} lo está deseando`, 'Pulsa con responsabilidad'];
-const NOPES = ['Tranqui, que se recalienta', 'El aro está en su pausa del café', 'Paciencia, joven becario',
+const TAGS = ['Interrumpe con estilo', 'Sabes que quieres', 'Nadie está mirando', 'Es por el bien del equipo',
+  'Un ping al día, alegría', 'Totalmente productivo', 'Lo está deseando', 'Pulsa con responsabilidad'];
+const NOPES = ['Tranqui, que se recalienta', 'El ring está en su pausa del café', 'Paciencia, joven becario',
   'Esto no es un ascensor: pulsar más no lo acelera', 'Recursos Humanos ha tomado nota', 'Respira. Cuenta hasta tres'];
 
 // ---- LEDs: 12 like the real WS2812 ring, index 0 at the top, clockwise ----
@@ -356,10 +354,10 @@ const idle = () => go('idle', '');
 const cooldown = () => S.until > performance.now()
   ? go('cooldown', `Ping entregado. Puedes enviar otro en ${secsLeft()} s.`, [S.until - performance.now(), idle])
   : idle();
-const offline = () => go('offline', `El PC de ${VICTIM} está dormido o apagado. Zzz…`);
+const offline = () => go('offline', 'El PC del ring está dormido o apagado. Zzz…');
 
 function play() {
-  go('play', `¡PING! El aro de ${VICTIM} está ${fxInfo(fxName(S.fx))[1]}.`, [PLAY_MS, cooldown]);
+  go('play', `¡PING! El Teams-Ring está ${fxInfo(fxName(S.fx))[1]}.`, [PLAY_MS, cooldown]);
   confetti();
   sfx('disco');
 }
@@ -396,7 +394,7 @@ async function send() {
   } else if (r.status === 429 && j.error === 'Cola llena') {
     go('full', `Hay atasco, vuelve en ${secs} s.`, [S.total, idle]);
   } else if (r.status === 429) {
-    go('soon', `Demasiado pronto. El aro aún está temblando: vuelve en ${secs} s.`, [S.total, idle]);
+    go('soon', `Demasiado pronto. El ring aún está temblando: vuelve en ${secs} s.`, [S.total, idle]);
     sfx('angry');
   } else {
     offline();
@@ -415,13 +413,13 @@ async function poll() {
   if (S.mode !== 'queued') return;
   if (st.playing) return play();
   if (!st.position) { // it played between two polls, or it waited too long for the ring to come back
-    return S.ringOff ? go('idle', `El aro de ${VICTIM} sigue desconectado y tu ping caducó. Prueba más tarde.`) : cooldown();
+    return S.ringOff ? go('idle', 'El Teams-Ring sigue desconectado y tu ping caducó. Prueba más tarde.') : cooldown();
   }
   showQueue(st.queue || [], st.ahead);
   if (st.ahead !== S.ahead || st.ring_offline !== S.ringOff) {
     S.ahead = st.ahead;
     S.ringOff = st.ring_offline;
-    msg.textContent = S.ringOff ? `El aro de ${VICTIM} está desconectado. Tu ping espera en la cola y sonará cuando vuelva.`
+    msg.textContent = S.ringOff ? 'El Teams-Ring está desconectado. Tu ping espera en la cola y sonará cuando vuelva.'
       : st.ahead === 0 ? '¡Eres el siguiente!'
       : st.ahead === 1 ? 'En cola, con 1 ping por delante.' : `En cola, con ${st.ahead} pings por delante.`;
   }
@@ -456,7 +454,7 @@ function nope() {
 }
 
 function egg() {
-  go('egg', `Logro desbloqueado: insistencia nivel jefe 🏆. ${VICTIM} no se va a enterar (o sí).`, [2600, cooldown]);
+  go('egg', 'Logro desbloqueado: insistencia nivel jefe 🏆. Nadie se va a enterar (o sí).', [2600, cooldown]);
   sfx('egg');
 }
 

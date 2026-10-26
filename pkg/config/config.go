@@ -32,7 +32,6 @@ type Config struct {
 		Duration int    `xml:"duration,attr"` // seconds one ping plays, 1-60
 		FX       int    `xml:"fx,attr"`       // default ping effect, an index into web.Effects
 		PickFX   bool   `xml:"pickfx,attr"`   // visitors may pick the effect
-		Name     string `xml:"name,attr"`     // whose ring it is, shown on the page
 		Timezone string `xml:"timezone,attr"` // IANA zone whose midnight ends a visitor's nick
 	} `xml:"web"`
 }

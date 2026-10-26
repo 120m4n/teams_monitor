@@ -28,7 +28,7 @@ func TestLoadBoth(t *testing.T) {
   <actuator mode="both"><serial port="COM16"/></actuator>
   <wifi ssid="net" password="pw" ip="192.168.1.50" gateway="192.168.1.1" subnet="255.255.255.0"/>
   <fx>3</fx>
-  <web listen="127.0.0.1:8080" cooldown="10" duration="8" fx="2" pickfx="false" name="Ana" timezone="Europe/Madrid"/>
+  <web listen="127.0.0.1:8080" cooldown="10" duration="8" fx="2" pickfx="false" timezone="Europe/Madrid"/>
 </teamsMonitor>`))
 	if err != nil {
 		t.Fatal(err)
@@ -36,7 +36,7 @@ func TestLoadBoth(t *testing.T) {
 	if !slices.Equal(c.Processes, []string{"ms-teams.exe", "zoom.exe"}) {
 		t.Errorf("processes = %v", c.Processes)
 	}
-	if c.SerialPort() != "COM16" || c.Actuator.Serial.Baud != 115200 || c.HTTPURL() != "http://192.168.1.50/led" || c.FX != 3 || c.Web.Listen != "127.0.0.1:8080" || c.Web.Cooldown != 10 || c.Web.Duration != 8 || c.Web.FX != 2 || c.Web.PickFX || c.Web.Name != "Ana" || c.Web.Timezone != "Europe/Madrid" {
+	if c.SerialPort() != "COM16" || c.Actuator.Serial.Baud != 115200 || c.HTTPURL() != "http://192.168.1.50/led" || c.FX != 3 || c.Web.Listen != "127.0.0.1:8080" || c.Web.Cooldown != 10 || c.Web.Duration != 8 || c.Web.FX != 2 || c.Web.PickFX || c.Web.Timezone != "Europe/Madrid" {
 		t.Errorf("got %+v", c)
 	}
 }
@@ -66,7 +66,7 @@ func TestLoadExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.SerialPort() == "" || c.Web.Listen != "127.0.0.1:8080" || c.Web.Duration != 5 || c.Web.Name == "" {
+	if c.SerialPort() == "" || c.Web.Listen != "127.0.0.1:8080" || c.Web.Duration != 5 || c.Web.Timezone != "America/Bogota" {
 		t.Errorf("example file drifted from the code: %+v", c)
 	}
 }

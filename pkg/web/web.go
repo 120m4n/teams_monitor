@@ -6,10 +6,8 @@
 package web
 
 import (
-	"bytes"
 	_ "embed"
 	"encoding/json"
-	"html"
 	"log"
 	"net"
 	"net/http"
@@ -21,10 +19,10 @@ import (
 )
 
 //go:embed index.html
-var page []byte // {{NAME}} is replaced by Options.Name
+var page []byte
 
 //go:embed welcome.html
-var welcome []byte // asks for the nickname the page needs; {{NAME}} as in page
+var welcome []byte // asks for the nickname the page needs
 
 // Same rule as the pages: letters and digits only, so a nick is safe anywhere it's shown.
 var nickRe = regexp.MustCompile(`^[A-Za-z0-9]{2,16}$`)
@@ -46,7 +44,6 @@ type Options struct {
 	Duration time.Duration  // how long one ping plays; the page shows its animation this long
 	FX       int            // effect used when the visitor doesn't pick one
 	PickFX   bool           // let visitors pick the effect
-	Name     string         // whose ring it is, shown on the page; set once, at startup
 	Loc      *time.Location // a visitor's nick expires at midnight here; nil means UTC
 }
 
@@ -59,9 +56,7 @@ type entry struct {
 
 type server struct {
 	Options
-	page    []byte        // index.html with the name filled in
-	welcome []byte        // welcome.html with the name filled in
-	wake    chan struct{} // nudges the worker after an enqueue
+	wake chan struct{} // nudges the worker after an enqueue
 
 	mu      sync.Mutex
 	last    map[string]time.Time // client -> time of its last accepted ping
@@ -74,9 +69,7 @@ type server struct {
 // unreachable; stop runs o.Duration after a start that worked. Pings run one at a time.
 // New serves the page. start plays fx on the ring for the visitor called nick; stop ends it.
 func New(start func(fx int, nick string) error, stop func(), o Options) http.Handler {
-	name := []byte(html.EscapeString(o.Name))
-	s := &server{Options: o, wake: make(chan struct{}, 1), last: map[string]time.Time{},
-		page: bytes.ReplaceAll(page, []byte("{{NAME}}"), name), welcome: bytes.ReplaceAll(welcome, []byte("{{NAME}}"), name)}
+	s := &server{Options: o, wake: make(chan struct{}, 1), last: map[string]time.Time{}}
 	go s.work(start, stop)
 	mux := http.NewServeMux()
 	serve := func(b []byte) http.HandlerFunc {
@@ -85,8 +78,8 @@ func New(start func(fx int, nick string) error, stop func(), o Options) http.Han
 			w.Write(b)
 		}
 	}
-	mux.HandleFunc("GET /{$}", serve(s.page))
-	mux.HandleFunc("GET /welcome", serve(s.welcome))
+	mux.HandleFunc("GET /{$}", serve(page))
+	mux.HandleFunc("GET /welcome", serve(welcome))
 	mux.HandleFunc("POST /ping", s.ping)
 	mux.HandleFunc("GET /status", s.status)
 	mux.HandleFunc("GET /config", func(w http.ResponseWriter, r *http.Request) {

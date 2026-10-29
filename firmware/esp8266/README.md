@@ -48,8 +48,11 @@ Al arrancar, la placa escribe por serial `teams_led ready, last reset: <motivo>`
 |---|---|
 | `Power On` | se conectó la alimentación (o se cortó y volvió) |
 | `External System` | botón RST o reinicio al flashear |
-| `Brownout` | caída de tensión: fuente o cable USB flojos, sobre todo con muchos LEDs encendidos |
+| `Brownout` | caída de tensión: fuente o cable USB flojos, sobre todo con muchos LEDs encendidos. `disco` y `fire` ya usan menos brillo (`HEAVY_BRIGHTNESS` = 50 frente a `BRIGHTNESS` = 80 en `main.cpp`) |
 | `Exception` / `Software Watchdog` / `Hardware Watchdog` | fallo del firmware |
+| `Software/System restart` | watchdog de red: 5 min sin ninguna petición HTTP (WiFi colgado, o la app apagada) |
+
+**Watchdog de red** (solo con WiFi): la app manda el estado por HTTP cada 30 s. Si la placa pasa 5 min sin recibir ninguna petición, se reinicia sola (`NET_WATCHDOG_MS` en `main.cpp`). Así se recupera cuando sigue encendida pero desaparece de la red, que antes solo se arreglaba pulsando RST. Con el PC o la app apagados, la placa se reinicia cada 5 min. No pasa nada, porque el anillo está apagado. Con `actuator mode="serial"` y WiFi configurado ocurre lo mismo, así que usa `http` o `both`.
 
 La app reenvía el estado cada 30 s (`--resync`), así que tras un reinicio el anillo vuelve a animarse solo. Apagado, el firmware repinta el anillo en negro cada segundo, así que si un ruido en la línea de datos enciende un LED, se apaga solo.
 
@@ -133,7 +136,7 @@ Invoke-RestMethod -Method Post -Uri "http://$ip/led" -ContentType text/plain -Bo
 .\teams_monitor.exe --http http://192.168.x.x/led --fx 3    # fuerza el auto fantástico
 ```
 
-- **Fallos de red:** si la placa no responde, la app espera hasta 3 s, anota el error en `%LOCALAPPDATA%\teams_monitor\teams_monitor.log` y sigue. No reintenta; el anillo se actualiza en el siguiente cambio de estado.
+- **Fallos de red:** si la placa no responde, la app espera hasta 3 s, anota el error en el log del día (`logs\` junto al exe) y sigue. No reintenta; el anillo se actualiza en el siguiente cambio de estado.
 - **Inicio automático:** si lo activas desde la bandeja, se guardan los mismos flags, así que arrancará con `--http ...`.
 
 ## Compilar y flashear
@@ -190,4 +193,4 @@ Con un cuerpo inválido responde HTTP 400.
 .\fake\ms-teams.exe -for 30s           # llamada simulada; ver "Simular una llamada" en el README principal
 ```
 
-Entra a una llamada de Teams, o lanza la simulada: en unos 2 s el anillo se enciende y aparece la notificación. Al colgar se apaga. Log en `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`.
+Entra a una llamada de Teams, o lanza la simulada: en unos 2 s el anillo se enciende y aparece la notificación. Al colgar se apaga. Log en `logs\teams_monitor-<fecha>.log`, junto al exe.

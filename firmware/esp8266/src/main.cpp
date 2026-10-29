@@ -9,11 +9,17 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 ESP8266WebServer server(80);
+// Network watchdog: the PC app POSTs its state every 30 s (--resync), so this long without any
+// request means the WiFi stack is stuck (seen in the field: powered, off the network, fixed by RST).
+// Restart. With the PC off this reboots the dark board every few minutes, which is harmless.
+constexpr uint32_t NET_WATCHDOG_MS = 5 * 60000;
+uint32_t lastRequestAt = 0;
 #endif
 
 constexpr uint8_t LED_PIN = D4;  // GPIO2: also the onboard LED, which will flicker with data
 constexpr uint8_t LED_COUNT = 12;
 constexpr uint8_t BRIGHTNESS = 80;  // 0-255; full white on 12 LEDs draws ~720 mA
+constexpr uint8_t HEAVY_BRIGHTNESS = 50;  // for disco and fire, which light all 12 LEDs all the time (brownout risk)
 
 Adafruit_NeoPixel ring(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -194,7 +200,9 @@ void render() {
     }
   }
   uint32_t t;
-  switch (currentFx(now - onAt, &t)) {
+  Fx fx = currentFx(now - onAt, &t);
+  ring.setBrightness(fx == FX_DISCO || fx == FX_FIRE ? HEAVY_BRIGHTNESS : BRIGHTNESS);  // every pixel is redrawn below
+  switch (fx) {
     case FX_FADE_IN: fadeIn(t); break;
     case FX_CLOCK: clockFace(t); break;
     case FX_VOICE: voice(t); break;
@@ -252,10 +260,12 @@ void setup() {
 #endif
   WiFi.begin(WIFI_SSID, WIFI_PASS);  // non-blocking; the core reconnects on its own
   server.on("/led", HTTP_POST, [] {
+    lastRequestAt = millis();
     bool ok = handleCommand(server.arg("plain"));
     server.send(ok ? 200 : 400, "text/plain", ok ? "OK\n" : "expected CALL_ON, CALL_OFF or FX <n>\n");
   });
   server.on("/", HTTP_GET, [] {  // health check: open http://<ip>/ to see uptime and why the board last restarted
+    lastRequestAt = millis();
     server.send(200, "text/plain", "teams_led up " + String(millis() / 1000) + " s, last reset: " + ESP.getResetReason() + "\n");
   });
   server.begin();
@@ -290,5 +300,9 @@ void loop() {
     announced = false;
   }
   server.handleClient();
+  if (millis() - lastRequestAt >= NET_WATCHDOG_MS) {
+    Serial.println("no HTTP request in 5 min, restarting");
+    ESP.restart();
+  }
 #endif
 }

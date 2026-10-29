@@ -8,7 +8,7 @@ From any OS (no cgo needed for Windows):
 GOOS=windows GOARCH=amd64 go build -ldflags -H=windowsgui -o teams_monitor.exe ./cmd/app
 ```
 
-`-H=windowsgui` hides the console window. Logs go to `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`.
+`-H=windowsgui` hides the console window. Logs go to `logs\teams_monitor-YYYY-MM-DD.log` next to the exe, a new file each day. **View logs** in the tray menu opens that folder. The exe's folder must be writable, so not `Program Files`.
 
 Copy `teams_monitor.exe` somewhere stable, e.g. `C:\Tools\teams_monitor.exe`.
 

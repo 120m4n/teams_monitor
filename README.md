@@ -113,7 +113,7 @@ Para grabar la WiFi y la IP en la placa: `powershell -ExecutionPolicy Bypass -Fi
 | `--web-tz America/Bogota` | XML o America/Bogota | zona horaria IANA; los nicks de los compañeros caducan a su medianoche |
 | `--web-cooldown 30s` | XML o 30s | tiempo mínimo entre pings de un mismo cliente |
 
-Log: `%LOCALAPPDATA%\teams_monitor\teams_monitor.log`. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
+Log: `logs\teams_monitor-YYYY-MM-DD.log` junto a `teams_monitor.exe`, un archivo por día. El menú **View logs** de la bandeja abre la carpeta, no el archivo, que puede ser grande. La carpeta del exe debe permitir escritura. Instalación e inicio automático en [docs/INSTALL.md](docs/INSTALL.md).
 
 ## Tricks
 

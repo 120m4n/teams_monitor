@@ -7,6 +7,7 @@ import (
 	"context"
 	_ "embed"
 	"log"
+	"os/exec"
 
 	"github.com/getlantern/systray"
 )
@@ -25,7 +26,8 @@ type Tray struct {
 // RunTray blocks on the calling (main) goroutine until Exit is clicked or ctx is
 // cancelled, then calls onExit.
 // onReady receives the Tray once the icon exists; it is the place to start polling.
-func RunTray(ctx context.Context, onReady func(*Tray), onExit func()) {
+// "View logs" opens logDir in Explorer (the folder, not a file: logs can be big).
+func RunTray(ctx context.Context, onReady func(*Tray), onExit func(), logDir string) {
 	go func() { <-ctx.Done(); systray.Quit() }()
 	systray.Run(func() {
 		systray.SetIcon(iconIdle)
@@ -33,6 +35,7 @@ func RunTray(ctx context.Context, onReady func(*Tray), onExit func()) {
 		t := &Tray{status: systray.AddMenuItem("Status: Idle", "")}
 		t.status.Disable()
 		auto := systray.AddMenuItemCheckbox("Start with Windows", "", AutoStartEnabled())
+		logs := systray.AddMenuItem("View logs", "")
 		systray.AddSeparator()
 		quit := systray.AddMenuItem("Exit", "")
 
@@ -47,6 +50,11 @@ func RunTray(ctx context.Context, onReady func(*Tray), onExit func()) {
 						auto.Check()
 					} else {
 						auto.Uncheck()
+					}
+				case <-logs.ClickedCh:
+					// explorer.exe exits 1 even on success, so only a failure to launch counts
+					if err := exec.Command("explorer.exe", logDir).Start(); err != nil {
+						log.Printf("ui: view logs: %v", err)
 					}
 				case <-quit.ClickedCh:
 					systray.Quit()

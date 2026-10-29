@@ -21,6 +21,7 @@ import (
 
 	"teams_monitor/pkg/actuator"
 	"teams_monitor/pkg/config"
+	"teams_monitor/pkg/dailylog"
 	"teams_monitor/pkg/detector"
 	"teams_monitor/pkg/events"
 	"teams_monitor/pkg/ui"
@@ -28,13 +29,14 @@ import (
 )
 
 func main() {
-	setupLog()
-
-	// teams_monitor.xml next to the exe sets the flag defaults; explicit flags still win.
 	exe, err := os.Executable()
 	if err != nil {
 		log.Fatal(err)
 	}
+	logDir := filepath.Join(filepath.Dir(exe), "logs")
+	setupLog(logDir)
+
+	// teams_monitor.xml next to the exe sets the flag defaults; explicit flags still win.
 	cfgPath := filepath.Join(filepath.Dir(exe), "teams_monitor.xml")
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
@@ -167,25 +169,20 @@ func main() {
 				}
 			})
 			t.SetInCall(mgr.State() == events.StateInCall) // in case we transitioned before the tray was up
-		}, stop)
+		}, stop, logDir)
 	}
 	<-done
 	actuate(false)
 	log.Print("stopped")
 }
 
-// setupLog writes to %LOCALAPPDATA%\teams_monitor\teams_monitor.log (and stderr,
+// setupLog writes to dir\teams_monitor-YYYY-MM-DD.log, a new file each day (and stderr,
 // which is a no-op in a -H=windowsgui build).
-func setupLog() {
-	dir, err := os.UserCacheDir()
+func setupLog(dir string) {
+	w, err := dailylog.New(dir)
 	if err != nil {
+		log.Printf("log dir: %v", err)
 		return
 	}
-	dir = filepath.Join(dir, "teams_monitor")
-	os.MkdirAll(dir, 0o755)
-	f, err := os.OpenFile(filepath.Join(dir, "teams_monitor.log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	log.SetOutput(io.MultiWriter(f, os.Stderr))
+	log.SetOutput(io.MultiWriter(w, os.Stderr))
 }
